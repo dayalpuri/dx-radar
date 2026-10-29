@@ -381,14 +381,39 @@
     .log-entry .sinpo-str { color: var(--amber); font-weight: bold; }
     .log-entry .del-btn { color: var(--accent); background: none; border: none;
       cursor: pointer; font-size: 14px; padding: 0 4px; }
+
+    /* Hlavička: nadpis + podtitulek */
+    .brand-text { display: flex; flex-direction: column; gap: 1px; }
+    .subtitle { font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+
+    /* Barevné odlišení skóre podle hodnoty - rychlejší scan než „vše amber" */
+    .sc-hi { color: var(--green); }
+    .sc-mid { color: var(--amber); }
+    .sc-lo { color: var(--muted); }
+
+    /* MOBIL (primární použití): větší tap-cíle, vzdušnější rozložení */
+    @media (max-width: 720px) {
+      body { font-size: 15px; padding: 8px; }
+      .controls { grid-template-columns: 1fr; }        /* ovládání pod sebe, ne 2 těsné sloupce */
+      .btn-sm, .band-pill, .action-btn { padding: 9px 12px; }  /* ~44px tap-cíl */
+      .band-pills { gap: 6px; }
+      .telemetry-bar { font-size: 13px; gap: 6px 14px; }
+      .main-tab { padding: 11px 8px; }
+      .preset-bar .btn-sm { flex: 1; text-align: center; }     /* GPS/Log na plnou šířku */
+      .st-meta { gap: 6px 12px; }
+      .pl330-advice { flex-direction: column; align-items: stretch; }
+    }
   </style>
 </head>
 <body>
 
 <header>
   <div class="brand">
-    <h1>DX Radar Pro // Balkón</h1>
-    <span class="badge-ver">PRO 2.0</span>
+    <div class="brand-text">
+      <h1>DX Radar Pro</h1>
+      <span class="subtitle">Kontextový SWL radar krátkých vln</span>
+    </div>
+    <span class="badge-ver">2.0</span>
   </div>
   <div class="clock-box" id="clock">--:-- UTC</div>
 </header>
@@ -419,7 +444,7 @@
       <input type="number" id="altitude" value="" step="10" placeholder="300">
     </div>
     <div class="control-group">
-      <label>Azimut balkónu: <strong><span id="azVal">180° (J)</span></strong></label>
+      <label title="Směr, kam máš volný výhled na oblohu (kam míří anténa). Stanice z tohoto směru mají bonus, z opačného penalizaci.">Směr výhledu / antény: <strong><span id="azVal">180° (J)</span></strong></label>
       <input type="range" id="azimuth" min="0" max="359" value="180">
     </div>
     <div class="control-group">
@@ -433,9 +458,6 @@
     <div class="control-group full" style="flex-direction: row; align-items: center; gap: 15px; margin-top: 2px;">
       <label style="display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--text);">
         <input type="checkbox" id="hideChina" checked> Odfiltrovat čínské vysílače (CRI/CNR)
-      </label>
-      <label style="display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--text);">
-        <input type="checkbox" id="simTime"> Simulovat 20:05 UTC (21:05 CET)
       </label>
     </div>
     <div class="control-group full">
@@ -586,6 +608,9 @@ function safeUrl(u) {
   const s = String(u == null ? '' : u).trim();
   return /^https?:\/\//i.test(s) ? s : '';
 }
+
+// Barevná třída skóre (zelená = dobré, amber = střední, tlumená = slabé)
+function scoreClass(s) { return s >= 70 ? 'sc-hi' : s >= 45 ? 'sc-mid' : 'sc-lo'; }
 
 // 2. SFÉRICKÁ MATEMATIKA (Vzdálenost a Azimut ortodromy)
 const toRad = deg => deg * Math.PI / 180;
@@ -830,10 +855,9 @@ function scoreStation(st, env, activeNow) {
 }
 
 function evaluateStations() {
-  const simTime = document.getElementById('simTime').checked;
   const now = new Date();
-  const utcMinutes = simTime ? (20 * 60 + 5) : (now.getUTCHours() * 60 + now.getUTCMinutes());
-  const timeLabel = simTime ? "20:05 UTC (Simulace)" : `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const timeLabel = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
   document.getElementById('clock').textContent = timeLabel; // hodiny běží i bez zadaného QTH
 
   const [myLat, myLon] = document.getElementById('qthCoords').value.split(',').map(s => parseFloat(s.trim()));
@@ -863,7 +887,7 @@ function evaluateStations() {
 
   const results = [];
 
-  const dayNum = simTime ? 3 : ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne (dnes: středa=3)
+  const dayNum = ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne
 
   const env = { myLat, myLon, alt, balconyAz, rxProfile, utcHour: now.getUTCHours(), now };
 
@@ -920,14 +944,14 @@ function evaluateStations() {
       <div class="st-header">
         <span class="freq">${r.freq} kHz</span>
         ${r.minsLeft <= 60 ? `<span class="ends-soon">⏹ KONČÍ ZA ${r.minsLeft} MIN!</span>` : ''}
-        <span class="score-badge" title="Heuristické skóre 5–99, ne pravděpodobnost">Skóre: <strong>${r.score}</strong> | Azimut: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
+        <span class="score-badge" title="Heuristické skóre 5–99, ne pravděpodobnost">Skóre: <strong class="${scoreClass(r.score)}">${r.score}</strong> | Azimut: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
       </div>
       <div class="st-title">${escapeHtml(r.station)} (${escapeHtml(r.country)}) — ${escapeHtml(r.lang)}</div>
       <div class="st-meta">
         <div>Vysílač: <span>${escapeHtml(r.site)} (${r.kw} kW)</span></div>
         <div>Vzdálenost: <span>${r.dist.toLocaleString('cs-CZ')} km</span></div>
         <div>Čas (UTC): <span>${escapeHtml(r.start)}–${escapeHtml(r.end)}</span></div>
-        <div>Odchylka od balkónu: <span>${r.angleDiff}°</span></div>
+        <div>Odchylka od směru: <span>${r.angleDiff}°</span></div>
       </div>
       <div class="pl330-advice">
         <span>💡 <strong>PL-330:</strong> ${escapeHtml(r.pl330Tip)}</span>
@@ -1387,7 +1411,7 @@ document.getElementById('azimuth').addEventListener('input', e => {
   evaluateStations();
 });
 
-['qthCoords', 'altitude', 'rxProfile', 'hideChina', 'simTime'].forEach(id => {
+['qthCoords', 'altitude', 'rxProfile', 'hideChina'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
     saveQth();          // ruční zadání QTH → uložit lokálně (per zařízení)
     evaluateStations();
