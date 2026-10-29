@@ -454,7 +454,14 @@
       .controls { grid-template-columns: 1fr; }        /* ovládání pod sebe, ne 2 těsné sloupce */
       .btn-sm, .band-pill, .action-btn { padding: 9px 12px; }  /* ~44px tap-cíl */
       .band-pills { gap: 6px; }
-      .telemetry-bar { font-size: 13px; gap: 6px 14px; }
+      /* Telemetrie: 2×2 mřížka místo jedné přetékající řady */
+      .telemetry-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px; }
+      .telemetry-bar span { white-space: normal; overflow-wrap: anywhere; }
+      /* Časová okna: užší, skrytý méně důležitý sloupec kW, zalomitelné názvy */
+      .windows-table { font-size: 13px; }
+      .windows-table th, .windows-table td { padding: 5px 6px; }
+      .windows-table th:nth-child(4), .windows-table td:nth-child(4) { display: none; } /* kW */
+      .windows-table .w-name { overflow-wrap: anywhere; }
       .main-tab { padding: 11px 8px; }
       .preset-bar { flex-wrap: wrap; }
       .preset-bar .btn-sm { flex: 1 1 140px; text-align: center; }  /* GPS/Log se zalomí, ne přetečou */
@@ -1447,10 +1454,14 @@ async function toggleStreamBox(cid) {
        <a href="${google}" target="_blank" rel="noopener" style="color:var(--cyan)">🔎 Nenajdu to tu — vyhledat web stanice</a>
      </div>`;
 }
-// Hraje právě nějaký webový stream? (pak nepřepisovat seznam auto-refreshem)
+// Přehrává/načítá se webový stream, nebo je otevřený panel streamů?
+// Pak NEPŘEKRESLOVAT seznam auto-refreshem (jinak zmizí přehrávač i během bufferování).
 function anyStreamPlaying() {
-  return [...document.querySelectorAll('.stream-box audio')]
-    .some(a => !a.paused && !a.ended && a.readyState > 2);
+  const audioBusy = [...document.querySelectorAll('.stream-box audio')]
+    .some(a => !a.paused && !a.ended);                 // hraje nebo buffruje (paused=false hned po play())
+  const boxOpen = [...document.querySelectorAll('.stream-box')]
+    .some(b => b.style.display !== 'none' && b.querySelector('audio'));
+  return audioBusy || boxOpen;
 }
 
 function playStream(cid, idx) {
