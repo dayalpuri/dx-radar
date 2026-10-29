@@ -25,6 +25,7 @@
       --shadow: 0 1px 3px rgba(0,0,0,.35), 0 4px 16px rgba(0,0,0,.22);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow-x: hidden; max-width: 100%; }
     body {
       background:
         radial-gradient(1200px 600px at 100% -10%, #1c1813 0%, rgba(28,24,19,0) 60%),
@@ -410,12 +411,6 @@
     .badge-ver { background: linear-gradient(180deg, #2f2820, #241f19); align-self: center; }
     .clock-box { font-size: 20px; }
 
-    /* Pilulky a malá tlačítka jako „pills" */
-    .band-pill, .btn-sm { border-radius: 999px; transition: background .12s, border-color .12s, color .12s; }
-    .band-pill.active { background: var(--amber); color: #1a1510; border-color: var(--amber); }
-    .main-tab { border-radius: 10px 10px 0 0; }
-    .main-tab.active { background: var(--card); }
-
     /* Frekvence jako hlavní akcent karty */
     .freq { color: var(--accent); }
     .station-card { padding: 12px 14px; transition: border-color .15s; }
@@ -431,15 +426,38 @@
     .score-badge strong.sc-mid { background: rgba(227, 178, 106, .16); }
     .score-badge strong.sc-lo  { background: rgba(155, 145, 132, .14); }
 
+    /* Spodní řada akcí vždy zalomitelná (jinak široká tlačítka přetečou) */
+    .btn-row { flex-wrap: wrap; }
+    .btn-row .action-btn { flex: 1 1 150px; }
+
+    /* Hlavička vpravo: hodiny + deník */
+    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+    /* QTH: pole + GPS vedle sebe */
+    .qth-row { display: flex; gap: 6px; }
+    .qth-row input { flex: 1 1 auto; min-width: 0; }
+    .qth-row .btn-sm { white-space: nowrap; }
+
+    /* Uspořádání dashboardu: DESKTOP = radar vlevo, nastavení+filtry vpravo */
+    .dashboard { grid-template-areas: "radar setup" "radar filters"; }
+    .setup { grid-area: setup; }
+    .radar-box { grid-area: radar; align-self: start; }
+    .filters { grid-area: filters; }
+
     /* MOBIL (primární použití): větší tap-cíle, vzdušnější rozložení */
     @media (max-width: 720px) {
       body { font-size: 15px; padding: 8px; }
+      header { flex-wrap: wrap; }
+      /* MOBIL: nastavení (poloha+směr) nahoře → graf → filtry → seznamy */
+      .dashboard { grid-template-areas: "setup" "radar" "filters"; }
+      .radar-box { align-self: stretch; }
       .controls { grid-template-columns: 1fr; }        /* ovládání pod sebe, ne 2 těsné sloupce */
       .btn-sm, .band-pill, .action-btn { padding: 9px 12px; }  /* ~44px tap-cíl */
       .band-pills { gap: 6px; }
       .telemetry-bar { font-size: 13px; gap: 6px 14px; }
       .main-tab { padding: 11px 8px; }
-      .preset-bar .btn-sm { flex: 1; text-align: center; }     /* GPS/Log na plnou šířku */
+      .preset-bar { flex-wrap: wrap; }
+      .preset-bar .btn-sm { flex: 1 1 140px; text-align: center; }  /* GPS/Log se zalomí, ne přetečou */
       .st-meta { gap: 6px 12px; }
       .pl330-advice { flex-direction: column; align-items: stretch; }
     }
@@ -455,16 +473,45 @@
     </div>
     <span class="badge-ver">2.0</span>
   </div>
-  <div class="clock-box" id="clock">--:-- UTC</div>
+  <div class="header-right">
+    <div class="clock-box" id="clock">--:-- UTC</div>
+    <button type="button" class="btn-sm" id="btnLog">📖 Log (<span id="logCount">0</span>)</button>
+  </div>
 </header>
 
-<div class="preset-bar">
-  <span>QTH:</span>
-  <button type="button" class="btn-sm" id="btnGps">📍 Zjistit polohu (GPS)</button>
-  <button type="button" class="btn-sm" id="btnLog">📖 Log (<span id="logCount">0</span>)</button>
-</div>
-
 <div class="dashboard">
+  <!-- 1) Nastavení: poloha + směr + stažení rozvrhu (na mobilu nahoře) -->
+  <section class="controls setup">
+    <div class="control-group full">
+      <label>Poloha (QTH — šířka, délka)</label>
+      <div class="qth-row">
+        <input type="text" id="qthCoords" value="" placeholder="např. 50.08, 14.42">
+        <button type="button" class="btn-sm" id="btnGps">📍 GPS</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Nadm. výška (m)</label>
+      <input type="number" id="altitude" value="" step="10" placeholder="300">
+    </div>
+    <div class="control-group">
+      <label>Sestava (RX + anténa)</label>
+      <select id="rxProfile">
+        <option value="whip">PL-330 + Prut (60cm)</option>
+        <option value="wire">PL-330 + Dlouhý drát</option>
+        <option value="loop">PL-330 + Smyčka MLA-30+</option>
+      </select>
+    </div>
+    <div class="control-group full">
+      <label title="Směr, kam máš volný výhled na oblohu (kam míří anténa). Stanice z tohoto směru mají bonus, z opačného penalizaci.">Směr výhledu / antény: <strong><span id="azVal">180° (J)</span></strong></label>
+      <input type="range" id="azimuth" min="0" max="359" value="180">
+      <button type="button" class="action-btn" id="btnCompass" style="margin-top:6px;">🧭 Zamknout azimut kompasem</button>
+    </div>
+    <div class="btn-row" style="display:flex; gap:8px; grid-column: 1/-1; margin-top:2px;">
+      <button type="button" class="action-btn" id="btnSync">⬇️ Stáhnout aktuální rozvrh</button>
+    </div>
+  </section>
+
+  <!-- 2) Radarový graf -->
   <div class="radar-box">
     <canvas id="radarCanvas" width="540" height="540"></canvas>
     <div class="radar-info" id="radarInfo">Klikni na tečku na radaru…</div>
@@ -474,29 +521,9 @@
     </div>
   </div>
 
-  <div class="controls">
-    <div class="control-group">
-      <label>QTH (Šířka, Délka)</label>
-      <input type="text" id="qthCoords" value="" placeholder="📍 GPS nebo ručně, např. 50.08, 14.42">
-    </div>
-    <div class="control-group">
-      <label>Nadm. výška (m n. m.)</label>
-      <input type="number" id="altitude" value="" step="10" placeholder="300">
-    </div>
-    <div class="control-group full">
-      <label title="Směr, kam máš volný výhled na oblohu (kam míří anténa). Stanice z tohoto směru mají bonus, z opačného penalizaci.">Směr výhledu / antény: <strong><span id="azVal">180° (J)</span></strong></label>
-      <input type="range" id="azimuth" min="0" max="359" value="180">
-      <button type="button" class="action-btn" id="btnCompass" style="margin-top:6px;">🧭 Zamknout kompasem telefonu</button>
-    </div>
-    <div class="control-group full">
-      <label>Sestava (RX + Anténa)</label>
-      <select id="rxProfile">
-        <option value="whip">PL-330 + Prut (60cm)</option>
-        <option value="wire">PL-330 + Dlouhý drát</option>
-        <option value="loop">PL-330 + Smyčka MLA-30+</option>
-      </select>
-    </div>
-    <div class="control-group full" style="flex-direction: row; align-items: center; gap: 15px; margin-top: 2px;">
+  <!-- 3) Filtry (na mobilu pod grafem) -->
+  <section class="controls filters">
+    <div class="control-group full" style="flex-direction: row; align-items: center; gap: 15px;">
       <label style="display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--text);">
         <input type="checkbox" id="hideChina" checked> Odfiltrovat čínské vysílače (CRI/CNR)
       </label>
@@ -529,12 +556,7 @@
         <span class="band-pill" data-chance="low" id="chanceLow">Spodní ⅓</span>
       </div>
     </div>
-    <div class="btn-row" style="display:flex; gap:8px; grid-column: 1/-1; margin-top:4px;">
-      <button type="button" class="action-btn" id="btnSync">⬇️ Stáhnout rozvrh</button>
-      <button type="button" class="action-btn" id="btnImport" onclick="document.getElementById('fileInput').click()">📂 Import EiBi (JSON/CSV)</button>
-      <input type="file" id="fileInput" style="display:none" accept=".json,.csv">
-    </div>
-  </div>
+  </section>
 </div>
 
 <div class="telemetry-bar" id="telemetryBar">
@@ -1425,6 +1447,12 @@ async function toggleStreamBox(cid) {
        <a href="${google}" target="_blank" rel="noopener" style="color:var(--cyan)">🔎 Nenajdu to tu — vyhledat web stanice</a>
      </div>`;
 }
+// Hraje právě nějaký webový stream? (pak nepřepisovat seznam auto-refreshem)
+function anyStreamPlaying() {
+  return [...document.querySelectorAll('.stream-box audio')]
+    .some(a => !a.paused && !a.ended && a.readyState > 2);
+}
+
 function playStream(cid, idx) {
   const res = streamCache.get(cid);
   if (!Array.isArray(res)) return;
@@ -1796,31 +1824,6 @@ function useDatabase(db, label) {
   document.getElementById('radarInfo').textContent = `${label}: ${db.length} záznamů`;
 }
 
-document.getElementById('fileInput').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const text = ev.target.result;
-    if (/\.csv$/i.test(file.name)) {
-      const db = parseEibiCsv(text);
-      if (!db.length) return alert('Z CSV nebyl rozpoznán žádný záznam (čeká se sked-*.csv z eibispace.de).');
-      saveLocalDb(db, { source: 'EiBi (import CSV)', season: 'a26/b26 dle souboru' });
-      useDatabase(db, `Import ${file.name}`);
-      alert(`Načteno ${db.length} záznamů z CSV EiBi a uloženo do prohlížeče.`);
-    } else {
-      try {
-        const db = JSON.parse(text);
-        if (!Array.isArray(db) || !db.length) throw new Error('prázdné pole');
-        saveLocalDb(db, { source: `Import ${file.name}`, season: '?' });
-        useDatabase(db, `Import ${file.name}`);
-        alert(`Načteno ${db.length} záznamů a uloženo do prohlížeče.`);
-      } catch (err) { alert('Neplatný JSON/CSV soubor.'); }
-    }
-  };
-  reader.readAsText(file);
-});
-
 // Online synchronizace rozvrhů bez Pythonu: HFCC (přesné souřadnice, azimuty,
 // dny, B26) má přednost, EiBi CSV doplňuje jako fallback.
 // Oba servery neposílají CORS hlavičky, proto každé URL zkoušíme:
@@ -1971,8 +1974,7 @@ document.getElementById('btnSync').addEventListener('click', async () => {
       } else {
         info.textContent = 'Online stažení se nepovedlo.';
         alert('Rozvrh se nepodařilo stáhnout online (HFCC offline, repozitář bez správné sezóny).\n\n' +
-              'Ruční cesta: v prohlížeči si stáhni http://www.hfcc.org/data/b26/B26all00.TXT + ' +
-              'site.txt (případně http://eibispace.de/dx/sked-b26.csv) a naimportuj tlačítkem 📂.');
+              'Zkus to později — aplikace zatím běží s posledními uloženými daty.');
       }
     }
   } finally {
@@ -2016,7 +2018,9 @@ updateLogBadge();               // počet zapsaných úlovků v deníku
 fetchSpaceWeather();            // async - po stažení přepočítá skóre
 evaluateStations();
 autoLoadSchedule();             // async - dotáhne plnou DB EiBi, pokud existuje
-setInterval(evaluateStations, 30000);
+// Auto-refresh každých 30 s, ale NE když hraje webový stream (jinak by se
+// přepsal seznam a přehrávač by zmizel). Po zastavení/zavření se obnoví sám.
+setInterval(() => { if (!anyStreamPlaying()) evaluateStations(); }, 30000);
 
 // Service Worker: po první návštěvě přes https funguje PWA i offline (letadlový režim).
 // Po vydání nové verze: SW se na pozadí updatuje a tato stránka se sama reloadne
