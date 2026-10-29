@@ -755,6 +755,32 @@ def passes_days(st, now_dt):
     return str(now_dt.isoweekday()) in days  # 1=Po ... 7=Ne
 
 
+def solar_elevation(lat, lon, dt):
+    """Elevace Slunce (°) nad bodem v daném UTC čase (pro denní absorpci)."""
+    rad = math.pi / 180
+    doy = dt.timetuple().tm_yday
+    decl = -23.44 * math.cos(rad * (360 / 365) * (doy + 10))
+    hour_utc = dt.hour + dt.minute / 60
+    solar_time = hour_utc + lon / 15
+    ha = (solar_time - 12) * 15
+    return math.degrees(math.asin(
+        math.sin(lat * rad) * math.sin(decl * rad) +
+        math.cos(lat * rad) * math.cos(decl * rad) * math.cos(ha * rad)))
+
+
+def day_absorption(freq, my_lat, my_lon, st_lat, st_lon, dt):
+    """Denní absorpce D-vrstvy: osvětlená trasa pod ~10 MHz je silně tlumená.
+    Shodné s PWA - hlavní oprava fantomových dálkových stanic v poledne."""
+    if freq >= 10000:
+        return 0
+    mid_lat, mid_lon = (my_lat + st_lat) / 2, (my_lon + st_lon) / 2
+    sun_el = solar_elevation(mid_lat, mid_lon, dt)
+    if sun_el <= 0:
+        return 0
+    freq_factor = (10000 - freq) / 10000
+    return -round(math.sin(math.radians(sun_el)) * freq_factor * 40)
+
+
 def _score_one(st, qth, rx, active_now):
     """Šance jedné stanice proti zadanému stavu éteru (active_now).
     Hlavní výpis jí předává právě vysílající; časová okna budoucí stav:
@@ -793,6 +819,10 @@ def _score_one(st, qth, rx, active_now):
     # vzdálené stanice nereálně vysoké skóre. ~ -6 b / 1800 km nad 1000 km.
     dist_penalty = -round((dist - 1000) / 1800 * 6) if dist > 1000 else 0
 
+    # Denní absorpce D-vrstvy na nízkých pásmech (osvětlená trasa) - shodné s PWA
+    day_absorb = day_absorption(st["freq"], lat, lon, st["lat"], st["lon"],
+                                datetime.now(timezone.utc))
+
     qrm_plus5 = next((o for o in active_now if o is not st
                       and o["freq"] == st["freq"] + 5 and o.get("kw", 0) >= st.get("kw", 0)), None)
     qrm_minus5 = next((o for o in active_now if o is not st
@@ -812,7 +842,7 @@ def _score_one(st, qth, rx, active_now):
         qrm_penalty = -8
         tip = f"QRM z {st['freq'] - 5} kHz ({qrm_minus5['station']}) -> Přepni na USB, BFO 00, BW 2.5 kHz!"
 
-    score = max(5, min(99, 35 + balcony_bonus + takeoff + antenna + power + beam_adj + qrm_penalty + dist_penalty))
+    score = max(5, min(99, 35 + balcony_bonus + takeoff + antenna + power + beam_adj + qrm_penalty + dist_penalty + day_absorb))
     return {"dist": dist, "bearing": bearing, "diff": round(diff), "score": score, "tip": tip}
 
 

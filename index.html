@@ -635,6 +635,33 @@ function geomagLabel(kp) {
   return "Extrémní bouře";
 }
 
+// Elevace Slunce (°) nad daným bodem v daném UTC čase - pro denní absorpci.
+function solarElevation(lat, lon, date) {
+  const rad = Math.PI / 180;
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const doy = (date - start) / 86400000;
+  const decl = -23.44 * Math.cos(rad * (360 / 365) * (doy + 10)); // sluneční deklinace
+  const hourUTC = date.getUTCHours() + date.getUTCMinutes() / 60;
+  const solarTime = hourUTC + lon / 15;                           // přibližný místní sluneční čas
+  const ha = (solarTime - 12) * 15;                               // hodinový úhel
+  const el = Math.asin(
+    Math.sin(lat * rad) * Math.sin(decl * rad) +
+    Math.cos(lat * rad) * Math.cos(decl * rad) * Math.cos(ha * rad)) / rad;
+  return el;
+}
+
+// Denní absorpce D-vrstvy: osvětlená trasa pod ~10 MHz je silně tlumená.
+// Toto je hlavní důvod, proč dřív svítily nereálné dálkové tropické stanice v poledne.
+function dayAbsorption(freq, myLat, myLon, stLat, stLon, date) {
+  if (freq >= 10000) return 0;
+  const midLat = (myLat + stLat) / 2;
+  const midLon = (myLon + stLon) / 2;
+  const sunEl = solarElevation(midLat, midLon, date); // osvětlení prostředku trasy
+  if (sunEl <= 0) return 0;                            // noční trasa = bez D-absorpce
+  const freqFactor = (10000 - freq) / 10000;          // 0..1, čím níž, tím hůř
+  return -Math.round(Math.sin(sunEl * Math.PI / 180) * freqFactor * 40);
+}
+
 function propagationAdjust(freq, bearing, sfi, kp, utcHours) {
   // Frekvenční okno LUF–MUF: co je nad MUF, vyletí do vesmíru (-35); hraniční -10.
   const muf = mufEstimate(sfi, utcHours);
@@ -770,6 +797,9 @@ function scoreStation(st, env, activeNow) {
   // (na prutové anténě z balkónu je stejně nechytneš). ~ -6 b / 1800 km nad 1000 km.
   const distPenalty = dist > 1000 ? -Math.round((dist - 1000) / 1800 * 6) : 0;
 
+  // D3. Denní absorpce D-vrstvy na nízkých pásmech (osvětlená trasa).
+  const dayAbsorb = dayAbsorption(st.freq, env.myLat, env.myLon, st.lat, st.lon, env.now || new Date());
+
   // F. Detekce sousedního a kanálového rušení (ACI / Co-Channel QRM)
   const qrmPlus5 = activeNow.find(other => other !== st && other.freq === st.freq + 5 && other.kw >= st.kw);
   const qrmMinus5 = activeNow.find(other => other !== st && other.freq === st.freq - 5 && other.kw >= st.kw);
@@ -795,11 +825,17 @@ function scoreStation(st, env, activeNow) {
     pl330Tip = "Slabší DX -> Drž rádio v ruce u zábradlí, zkus ECSS (USB/LSB, BW 2.5 kHz)";
   }
 
-  const score = Math.max(5, Math.min(99, 35 + balconyBonus + takeOffBonus + beamAdj + antennaBonus + powerBonus + propAdj + qrmPenalty + distPenalty));
+  const score = Math.max(5, Math.min(99, 35 + balconyBonus + takeOffBonus + beamAdj + antennaBonus + powerBonus + propAdj + qrmPenalty + distPenalty + dayAbsorb));
   return { dist, bearing, angleDiff: Math.round(angleDiff), score, pl330Tip, qrmFlag };
 }
 
 function evaluateStations() {
+  const simTime = document.getElementById('simTime').checked;
+  const now = new Date();
+  const utcMinutes = simTime ? (20 * 60 + 5) : (now.getUTCHours() * 60 + now.getUTCMinutes());
+  const timeLabel = simTime ? "20:05 UTC (Simulace)" : `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
+  document.getElementById('clock').textContent = timeLabel; // hodiny běží i bez zadaného QTH
+
   const [myLat, myLon] = document.getElementById('qthCoords').value.split(',').map(s => parseFloat(s.trim()));
   // Bez platné polohy nelze počítat azimut/vzdálenost - vyzvi k zadání QTH
   if (!Number.isFinite(myLat) || !Number.isFinite(myLon)) {
@@ -814,12 +850,6 @@ function evaluateStations() {
   const balconyAz = parseFloat(document.getElementById('azimuth').value) || 180;
   const rxProfile = document.getElementById('rxProfile').value;
   const hideChina = document.getElementById('hideChina').checked;
-  const simTime = document.getElementById('simTime').checked;
-
-  const now = new Date();
-  const utcMinutes = simTime ? (20 * 60 + 5) : (now.getUTCHours() * 60 + now.getUTCMinutes());
-  const timeLabel = simTime ? "20:05 UTC (Simulace)" : `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
-  document.getElementById('clock').textContent = timeLabel;
 
   // Všechny právě vysílající stanice (včetně čínských pro detekci QRM!)
   // Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech nejsilnější záznam,
@@ -835,7 +865,7 @@ function evaluateStations() {
 
   const dayNum = simTime ? 3 : ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne (dnes: středa=3)
 
-  const env = { myLat, myLon, alt, balconyAz, rxProfile, utcHour: now.getUTCHours() };
+  const env = { myLat, myLon, alt, balconyAz, rxProfile, utcHour: now.getUTCHours(), now };
 
   for (const st of activeAll) {
     if (hideChina && st.isChina) continue;
@@ -902,7 +932,7 @@ function evaluateStations() {
       <div class="pl330-advice">
         <span>💡 <strong>PL-330:</strong> ${escapeHtml(r.pl330Tip)}</span>
         <span style="display:flex; gap:5px; white-space:nowrap;">
-          <button class="log-btn" onclick="copyMarkdownLog(${r.freq}, '${r.station.replace(/'/g, "")}', '${r.site}', ${r.dist}, ${r.bearing})">📋 MD</button>
+          <button class="log-btn" onclick="copyMarkdownLog('${cid}')">📋 MD</button>
           <button class="log-btn" onclick="toggleLogForm('${cid}')">📝 Log</button>
           <button class="log-btn" onclick="toggleStreamBox('${cid}')">🎧 Stream</button>
         </span>
@@ -1125,13 +1155,16 @@ document.getElementById('radarCanvas').addEventListener('click', ev => {
 });
 
 // 8. EXPORT DO OBSIDIANU / MARKDOWNU
-function copyMarkdownLog(freq, station, site, dist, bearing) {  const now = new Date();
+function copyMarkdownLog(cid) {
+  const r = stationByCid(cid);
+  if (!r) return;
+  const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const utcStr = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
   const alt = document.getElementById('altitude').value;
   const rx = document.getElementById('rxProfile').options[document.getElementById('rxProfile').selectedIndex].text;
 
-  const md = `- **${freq} kHz** | **${station}** (${site}) | ${dateStr} ${utcStr} | ${dist} km (${bearing}°) | QTH: ${alt}m | RX: ${rx} | SINPO: `;
+  const md = `- **${r.freq} kHz** | **${r.station}** (${r.site}) | ${dateStr} ${utcStr} | ${r.dist} km (${r.bearing}°) | QTH: ${alt}m | RX: ${rx} | SINPO: `;
   navigator.clipboard.writeText(md).then(() => {
     const t = document.getElementById('toast');
     t.style.display = 'block';
