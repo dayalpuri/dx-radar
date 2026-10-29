@@ -9,29 +9,38 @@
   <title>DX Radar Pro // Kontextový SWL Engine</title>
   <style>
     :root {
-      --bg: #14110e;
-      --panel: #1c1916;
-      --card: #221e1a;
-      --border: #35302a;
+      --bg: #12100d;
+      --panel: #1b1815;
+      --card: #211d19;
+      --border: #332e28;
       --border-hi: #4a443c;
-      --text: #e3ddd3;
-      --muted: #a09688;
-      --accent: #e2916a;
-      --amber: #d9a862;
-      --green: #96c98f;
-      --cyan: #86bcb2;
+      --text: #ece6dc;
+      --muted: #9b9184;
+      --accent: #ec9a73;
+      --amber: #e3b26a;
+      --green: #9fd398;
+      --cyan: #8ec7bd;
+      --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Roboto Mono', ui-monospace, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --shadow: 0 1px 3px rgba(0,0,0,.35), 0 4px 16px rgba(0,0,0,.22);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background-color: var(--bg);
+      background:
+        radial-gradient(1200px 600px at 100% -10%, #1c1813 0%, rgba(28,24,19,0) 60%),
+        var(--bg);
       color: var(--text);
-      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Roboto Mono', monospace;
+      font-family: var(--sans);
       font-size: 16px;
-      line-height: 1.5;
-      padding: 10px;
+      line-height: 1.55;
+      padding: 12px;
       max-width: 960px;
       margin: 0 auto;
+      -webkit-font-smoothing: antialiased;
     }
+    /* Monospace jen tam, kde se čtou čísla/kódy (frekvence, čas, skóre, tabulky) */
+    .clock-box, .freq, .score-badge, .windows-table, .telemetry-bar,
+    input, select, .badge-ver, .sinpo-str { font-family: var(--mono); }
     /* Hlavička a telemetrie */
     header {
       border-bottom: 1px solid var(--border);
@@ -391,6 +400,37 @@
     .sc-mid { color: var(--amber); }
     .sc-lo { color: var(--muted); }
 
+    /* ===== Vizuální refresh: hloubka, chipy, modernější prvky ===== */
+    .radar-box, .controls, .telemetry-bar, .upcoming-box, .station-card, .log-panel-inner {
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+    }
+    header { padding-bottom: 10px; }
+    h1 { font-size: 19px; letter-spacing: .3px; text-transform: none; color: var(--text); font-weight: 700; }
+    .badge-ver { background: linear-gradient(180deg, #2f2820, #241f19); align-self: center; }
+    .clock-box { font-size: 20px; }
+
+    /* Pilulky a malá tlačítka jako „pills" */
+    .band-pill, .btn-sm { border-radius: 999px; transition: background .12s, border-color .12s, color .12s; }
+    .band-pill.active { background: var(--amber); color: #1a1510; border-color: var(--amber); }
+    .main-tab { border-radius: 10px 10px 0 0; }
+    .main-tab.active { background: var(--card); }
+
+    /* Frekvence jako hlavní akcent karty */
+    .freq { color: var(--accent); }
+    .station-card { padding: 12px 14px; transition: border-color .15s; }
+    .station-card:hover { border-color: var(--border-hi); }
+    .st-title { font-weight: 600; }
+
+    /* Skóre jako barevný chip (zelená/amber/tlumená dle hodnoty) */
+    .score-badge { background: transparent; border: none; padding: 0; font-size: 13px; color: var(--muted); }
+    .score-badge strong.sc-hi, .score-badge strong.sc-mid, .score-badge strong.sc-lo {
+      padding: 2px 9px; border-radius: 999px; font-weight: 700;
+    }
+    .score-badge strong.sc-hi  { background: rgba(159, 211, 152, .16); }
+    .score-badge strong.sc-mid { background: rgba(227, 178, 106, .16); }
+    .score-badge strong.sc-lo  { background: rgba(155, 145, 132, .14); }
+
     /* MOBIL (primární použití): větší tap-cíle, vzdušnější rozložení */
     @media (max-width: 720px) {
       body { font-size: 15px; padding: 8px; }
@@ -443,11 +483,12 @@
       <label>Nadm. výška (m n. m.)</label>
       <input type="number" id="altitude" value="" step="10" placeholder="300">
     </div>
-    <div class="control-group">
+    <div class="control-group full">
       <label title="Směr, kam máš volný výhled na oblohu (kam míří anténa). Stanice z tohoto směru mají bonus, z opačného penalizaci.">Směr výhledu / antény: <strong><span id="azVal">180° (J)</span></strong></label>
       <input type="range" id="azimuth" min="0" max="359" value="180">
+      <button type="button" class="action-btn" id="btnCompass" style="margin-top:6px;">🧭 Zamknout kompasem telefonu</button>
     </div>
-    <div class="control-group">
+    <div class="control-group full">
       <label>Sestava (RX + Anténa)</label>
       <select id="rxProfile">
         <option value="whip">PL-330 + Prut (60cm)</option>
@@ -489,7 +530,6 @@
       </div>
     </div>
     <div class="btn-row" style="display:flex; gap:8px; grid-column: 1/-1; margin-top:4px;">
-      <button type="button" class="action-btn" id="btnCompass">🧭 Zamknout azimut kompasem</button>
       <button type="button" class="action-btn" id="btnSync">⬇️ Stáhnout rozvrh</button>
       <button type="button" class="action-btn" id="btnImport" onclick="document.getElementById('fileInput').click()">📂 Import EiBi (JSON/CSV)</button>
       <input type="file" id="fileInput" style="display:none" accept=".json,.csv">
