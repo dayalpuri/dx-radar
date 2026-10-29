@@ -1,0 +1,16 @@
+{
+  "name": "DX Radar Pro — Kontextový SWL Engine",
+  "short_name": "DX Radar",
+  "description": "Balkónový DX engine pro krátkovlnný SWL DXing: azimutový radar, EiBi databáze, NOAA telemetrie a tipy pro Tecsun PL-330.",
+  "lang": "cs",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14110e",
+  "theme_color": "#14110e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

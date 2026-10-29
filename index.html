@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#14110e">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <title>DX Radar Pro // Kontextový SWL Engine</title>
+  <style>
+    :root {
+      --bg: #14110e;
+      --panel: #1c1916;
+      --card: #221e1a;
+      --border: #35302a;
+      --border-hi: #4a443c;
+      --text: #e3ddd3;
+      --muted: #a09688;
+      --accent: #e2916a;
+      --amber: #d9a862;
+      --green: #96c98f;
+      --cyan: #86bcb2;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Roboto Mono', monospace;
+      font-size: 16px;
+      line-height: 1.5;
+      padding: 10px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    /* Hlavička a telemetrie */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    h1 { font-size: 17px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+    .badge-ver { background: #2a241e; color: var(--amber); padding: 2px 6px; border-radius: 3px; font-size: 11px; border: 1px solid var(--border-hi); }
+    .clock-box { font-size: 18px; font-weight: bold; color: var(--amber); }
+
+    /* Rychlé QTH presety */
+    .preset-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    .preset-bar span { font-size: 13px; color: var(--muted); margin-right: 4px; }
+    .btn-sm {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-sm:hover, .btn-sm.active { border-color: var(--accent); color: var(--amber); background: #26211c; }
+
+    /* Hlavní mřížka: Radar vlevo, Ovládání vpravo (na mobilu pod sebou) */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+      min-width: 0;
+    }
+    @media (max-width: 720px) {
+      .dashboard { grid-template-columns: 1fr; }
+    }
+
+    .radar-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      min-width: 0;
+    }
+    canvas#radarCanvas {
+      width: 100%;
+      max-width: 270px;
+      aspect-ratio: 1 / 1;
+      height: auto;
+      cursor: crosshair;
+    }
+    .radar-info {
+      width: 100%;
+      min-height: 18px;
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--cyan);
+      text-align: center;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .radar-legend {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+      text-align: center;
+      display: flex;
+      gap: 10px;
+      min-width: 0;
+    }
+    .radar-legend span { min-width: 0; overflow-wrap: anywhere; }
+    .dot-g { color: var(--green); }
+    .dot-a { color: var(--amber); }
+    .dot-c { color: var(--cyan); }
+
+    .controls {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-content: start;
+    }
+    .control-group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .control-group.full { grid-column: 1 / -1; }
+    label { font-size: 12px; color: var(--muted); text-transform: uppercase; display: flex; justify-content: space-between; }
+    label strong { color: var(--amber); }
+    input, select, button {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+    input[type="range"] { padding: 0; accent-color: var(--accent); }
+    button.action-btn {
+      background: #26211c;
+      color: var(--accent);
+      border-color: var(--border-hi);
+      cursor: pointer;
+      font-weight: bold;
+      padding: 7px 9px;
+    }
+    button.action-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    .band-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .band-pill {
+      padding: 4px 9px;
+      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      cursor: pointer;
+      background: var(--bg);
+      color: var(--muted);
+    }
+    .band-pill.active {
+      background: #26211c;
+      color: var(--amber);
+      border-color: var(--amber);
+      font-weight: bold;
+    }
+
+    /* Telemetrická stavová lišta */
+    .telemetry-bar {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--amber);
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .telemetry-bar span strong { color: var(--amber); }
+
+    /* Sekce nadcházejících přechodů (Časová okna) */
+    .upcoming-box {
+      background: #201a12;
+      border: 1px solid #453a26;
+      border-left: 3px solid var(--amber);
+      border-radius: 5px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .upcoming-box h3 {
+      font-size: 14px;
+      color: var(--amber);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .dim-line { color: var(--muted); padding: 4px 0; }
+
+    /* Tabulka časových oken (starty / uvolňující se kanály) */
+    .windows-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    .windows-table th {
+      text-align: left; color: var(--amber); font-size: 13px;
+      text-transform: uppercase; letter-spacing: 1px;
+      padding: 4px 6px; border-bottom: 1px solid #453a26;
+    }
+    .windows-table td { padding: 6px; border-bottom: 1px solid #2a2520; vertical-align: top; }
+    .windows-table .w-when { white-space: nowrap; color: var(--text); }
+    .windows-table .w-freq { color: var(--amber); font-weight: bold; white-space: nowrap; }
+    .windows-table .w-kw { text-align: right; white-space: nowrap; }
+    .windows-table .w-score { text-align: right; white-space: nowrap; }
+    .windows-table .w-info { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    /* Taby hlavního obsahu: Cíle teď / Časová okna */
+    .main-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .main-tab {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 15px;
+      font-weight: bold;
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 5px 5px 0 0;
+      cursor: pointer;
+    }
+    .main-tab.active {
+      background: #26211c;
+      color: var(--amber);
+      border-color: var(--amber);
+      border-bottom: 2px solid var(--amber);
+    }
+    .main-tab .tab-count { font-weight: normal; font-size: 12px; }
+
+    .status-bar {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      border-left: 2px solid var(--amber);
+      padding-left: 8px;
+    }
+
+    .station-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .station-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      position: relative;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .station-card > * { min-width: 0; }
+    .station-card.top-pick { border-left: 3px solid var(--green); }
+    .station-card.qrm-warn { border-left: 3px solid var(--amber); }
+    .station-card.highlight { outline: 2px solid var(--cyan); }
+
+    .st-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
+    .freq { font-size: 24px; font-weight: bold; color: var(--amber); }
+    .ends-soon {
+      font-size: 14px;
+      font-weight: bold;
+      color: #ffb0a0;
+      padding: 3px 7px;
+      border-radius: 3px;
+      background: #3a201a;
+      border: 1px solid #7a4030;
+    }
+    .st-header span, .score-badge { min-width: 0; overflow-wrap: anywhere; }
+    .score-badge {
+      font-size: 14px;
+      padding: 3px 7px;
+      border-radius: 3px;
+      background: #2a2520;
+      border: 1px solid var(--border);
+    }
+    .st-title { font-size: 17px; font-weight: bold; color: #f2eee8; margin-bottom: 4px; }
+    .st-meta { font-size: 14px; color: var(--muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .st-meta span { color: var(--text); }
+
+    .pl330-advice {
+      background: #1a1712;
+      border: 1px dashed var(--border);
+      padding: 7px 9px;
+      border-radius: 4px;
+      font-size: 14px;
+      color: var(--amber);
+      margin-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .log-btn {
+      font-size: 12px;
+      padding: 4px 7px;
+      white-space: nowrap;
+      background: #1f2a1c;
+      color: var(--green);
+      border-color: #33502e;
+      cursor: pointer;
+    }
+    .toast {
+      position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%);
+      background: var(--green); color: #14110e; padding: 9px 15px;
+      border-radius: 4px; font-weight: bold; font-size: 13px; display: none;
+      z-index: 60;
+    }
+
+    /* SINPO logovací formulář v kartě */
+    .log-form {
+      background: #1a1712;
+      border: 1px solid var(--border-hi);
+      border-radius: 4px;
+      padding: 8px;
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .log-form input[type="number"] { width: 46px; padding: 4px; text-align: center; }
+    .log-form .sinpo-lbl { color: var(--muted); font-size: 11px; }
+
+    /* Panel webových streamů pro ověření ID stanice */
+    .stream-box {
+      background: #121a1a;
+      border: 1px solid #233;
+      border-left: 3px solid var(--cyan);
+      border-radius: 4px;
+      padding: 8px;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .stream-item {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 8px; padding: 4px 0; border-bottom: 1px dashed #233;
+      flex-wrap: wrap;
+    }
+    .stream-item:last-child { border-bottom: none; }
+    .stream-item a { color: var(--cyan); text-decoration: none; }
+    .stream-play { font-size: 11px; padding: 3px 7px; cursor: pointer;
+      background: #122020; color: var(--cyan); border: 1px solid #2a4848; border-radius: 3px; }
+
+    /* Modální panel deníku */
+    .log-panel {
+      position: fixed; inset: 0; background: rgba(10, 8, 6, 0.85);
+      z-index: 50; display: none; padding: 20px; overflow: auto;
+    }
+    .log-panel-inner {
+      background: var(--panel); border: 1px solid var(--border-hi);
+      border-radius: 6px; max-width: 760px; margin: 0 auto; padding: 14px;
+    }
+    .log-entry {
+      border-bottom: 1px dashed var(--border); padding: 7px 2px;
+      display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      font-size: 12px; align-items: baseline;
+    }
+    .log-entry .sinpo-str { color: var(--amber); font-weight: bold; }
+    .log-entry .del-btn { color: var(--accent); background: none; border: none;
+      cursor: pointer; font-size: 14px; padding: 0 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>DX Radar Pro // Balkón</h1>
+    <span class="badge-ver">PRO 2.0</span>
+  </div>
+  <div class="clock-box" id="clock">--:-- UTC</div>
+</header>
+
+<div class="preset-bar">
+  <span>QTH:</span>
+  <button type="button" class="btn-sm" id="btnGps">📍 Zjistit polohu (GPS)</button>
+  <button type="button" class="btn-sm" id="btnLog">📖 Log (<span id="logCount">0</span>)</button>
+</div>
+
+<div class="dashboard">
+  <div class="radar-box">
+    <canvas id="radarCanvas" width="540" height="540"></canvas>
+    <div class="radar-info" id="radarInfo">Klikni na tečku na radaru…</div>
+    <div class="radar-legend" style="flex-direction:column; gap:2px;">
+      <span>Číslo ve výseči = počet aktivních vysílačů ve směru</span>
+      <span><span class="dot-g">●</span> top cíle (bez čísel, detail klepnutím) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> ostatní</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>QTH (Šířka, Délka)</label>
+      <input type="text" id="qthCoords" value="" placeholder="📍 GPS nebo ručně, např. 50.08, 14.42">
+    </div>
+    <div class="control-group">
+      <label>Nadm. výška (m n. m.)</label>
+      <input type="number" id="altitude" value="" step="10" placeholder="300">
+    </div>
+    <div class="control-group">
+      <label>Azimut balkónu: <strong><span id="azVal">180° (J)</span></strong></label>
+      <input type="range" id="azimuth" min="0" max="359" value="180">
+    </div>
+    <div class="control-group">
+      <label>Sestava (RX + Anténa)</label>
+      <select id="rxProfile">
+        <option value="whip">PL-330 + Prut (60cm)</option>
+        <option value="wire">PL-330 + Dlouhý drát</option>
+        <option value="loop">PL-330 + Smyčka MLA-30+</option>
+      </select>
+    </div>
+    <div class="control-group full" style="flex-direction: row; align-items: center; gap: 15px; margin-top: 2px;">
+      <label style="display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--text);">
+        <input type="checkbox" id="hideChina" checked> Odfiltrovat čínské vysílače (CRI/CNR)
+      </label>
+      <label style="display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--text);">
+        <input type="checkbox" id="simTime"> Simulovat 20:05 UTC (21:05 CET)
+      </label>
+    </div>
+    <div class="control-group full">
+      <label>Filtr pásem</label>
+      <div class="band-pills" id="bandPills">
+        <span class="band-pill active" data-band="all">Vše</span>
+        <span class="band-pill" data-band="tropo">60m/90m</span>
+        <span class="band-pill" data-band="49">49m</span>
+        <span class="band-pill" data-band="41">41m</span>
+        <span class="band-pill" data-band="31">31m</span>
+        <span class="band-pill" data-band="25">25m</span>
+        <span class="band-pill" data-band="19">19m+</span>
+      </div>
+    </div>
+    <div class="control-group full">
+      <label>Řazení stanic</label>
+      <div class="band-pills" id="sortPills">
+        <span class="band-pill active" data-sort="freq">Kmitočet ▲</span>
+        <span class="band-pill" data-sort="score">Skóre ▼</span>
+      </div>
+    </div>
+    <div class="control-group full">
+      <label>Skóre úlovku (tercily) <span style="color:var(--muted); font-weight:400;">— heuristika 5–99, ne %</span></label>
+      <div class="band-pills" id="chancePills">
+        <span class="band-pill active" data-chance="all">Vše</span>
+        <span class="band-pill" data-chance="top" id="chanceTop">Nejlepší ⅓</span>
+        <span class="band-pill" data-chance="mid" id="chanceMid">Střední ⅓</span>
+        <span class="band-pill" data-chance="low" id="chanceLow">Spodní ⅓</span>
+      </div>
+    </div>
+    <div class="btn-row" style="display:flex; gap:8px; grid-column: 1/-1; margin-top:4px;">
+      <button type="button" class="action-btn" id="btnCompass">🧭 Zamknout azimut kompasem</button>
+      <button type="button" class="action-btn" id="btnSync">⬇️ Stáhnout rozvrh</button>
+      <button type="button" class="action-btn" id="btnImport" onclick="document.getElementById('fileInput').click()">📂 Import EiBi (JSON/CSV)</button>
+      <input type="file" id="fileInput" style="display:none" accept=".json,.csv">
+    </div>
+  </div>
+</div>
+
+<div class="telemetry-bar" id="telemetryBar">
+  <span>Sluneční tok: <strong id="twSfi">SFI --</strong></span>
+  <span>Geomagnetika: <strong id="twKp">Kp --</strong></span>
+  <span>MUF odhad: <strong id="twMuf">-- MHz</strong></span>
+  <span>Stav: <strong id="twCond">Načítám NOAA…</strong></span>
+</div>
+
+<div class="main-tabs" id="mainTabs">
+  <button type="button" class="main-tab active" data-tab="targets">🎯 Cíle teď <span class="tab-count" id="targetsCount"></span></button>
+  <button type="button" class="main-tab" data-tab="upcoming">⏱ Časová okna <span class="tab-count" id="upcomingCount"></span></button>
+</div>
+
+<div id="tab-targets">
+  <div class="status-bar" id="statusBar">
+    <span>Take-off bonus: -- dB</span>
+    <span>Aktivní v okně: -- stanic</span>
+  </div>
+
+  <div class="station-list" id="stationList"></div>
+</div>
+
+<div id="tab-upcoming" hidden>
+  <div class="band-pills" id="windowsSortPills" style="margin-bottom:8px;">
+    <span class="band-pill active" data-wsort="time">Čas ▲</span>
+    <span class="band-pill" data-wsort="freq">Kmitočet ▲</span>
+    <span class="band-pill" data-wsort="kw">Výkon ▼</span>
+    <span class="band-pill" data-wsort="score">Skóre ▼</span>
+  </div>
+  <div class="upcoming-box" id="upcomingBox">
+    <h3>⏱ Časová okna — starty ▶ a uvolňující se kanály 🔓 (příštích 60 min)</h3>
+    <div id="upcomingList"></div>
+  </div>
+</div>
+
+<div class="log-panel" id="logPanel" onclick="if(event.target===this) toggleLogPanel(false)">
+  <div class="log-panel-inner">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+      <h2 style="color:var(--amber); font-size:15px; text-transform:uppercase;">📖 SWL Deník</h2>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="action-btn" id="btnLogExport">📋 Export MD</button>
+        <button class="action-btn" id="btnLogClear">🗑 Vymazat vše</button>
+        <button class="action-btn" onclick="toggleLogPanel(false)">✖ Zavřít</button>
+      </div>
+    </div>
+    <div id="logEntries"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Zkopírováno do schránky (Markdown)!</div>
+
+<script>
+// 1. VZOREK DATABÁZE (Včetně čínských stanic na pozadí pro výpočet QRM kolizí!)
+//    Plnou databázi EiBi (~10 000 záznamů) vygeneruje eibi_sync.py a nahrajete ji tlačítkem 📂.
+let SCHEDULE_DB = [
+  { freq: 5995, start: "19:00", end: "23:00", station: "ORTM Radio Mali", country: "MLI", lang: "Fr/Bambara", site: "Bamako", lat: 12.65, lon: -8.0, kw: 50, isChina: false },
+  { freq: 6015, start: "18:00", end: "20:00", station: "ZBC Radio Zanzibar", country: "TZA", lang: "Swahili", site: "Dole", lat: -6.10, lon: 39.26, kw: 50, isChina: false },
+  { freq: 6020, start: "19:00", end: "22:00", station: "China Radio Int.", country: "CHN", lang: "Albanian/Russian", site: "Szczecinek/Kashgar", lat: 39.47, lon: 75.98, kw: 500, isChina: true },
+  { freq: 6110, start: "18:00", end: "20:00", station: "Radio Romania Int.", country: "ROU", lang: "German", site: "Tiganesti", lat: 44.75, lon: 26.10, kw: 300, isChina: false },
+  { freq: 6110, start: "18:00", end: "21:00", station: "Radio Fana", country: "ETH", lang: "Amharic/Oromo", site: "Addis Abeba", lat: 8.88, lon: 38.78, kw: 100, isChina: false },
+  { freq: 6185, start: "19:20", end: "20:20", station: "IRIB Voice of Iran", country: "IRN", lang: "English", site: "Sirjan", lat: 29.45, lon: 55.68, kw: 500, isChina: false },
+  { freq: 9420, start: "18:00", end: "23:00", station: "ERT Voice of Greece", country: "GRC", lang: "Greek", site: "Avlis", lat: 38.40, lon: 23.60, kw: 100, isChina: false },
+  { freq: 9620, start: "19:00", end: "20:30", station: "All India Radio", country: "IND", lang: "Hindi/English", site: "Bengaluru", lat: 13.23, lon: 77.70, kw: 500, isChina: false },
+  { freq: 7220, start: "20:30", end: "21:00", station: "Voice of Vietnam", country: "VNM", lang: "English", site: "Son Tay", lat: 21.13, lon: 105.50, kw: 100, isChina: false },
+  { freq: 7220, start: "20:00", end: "20:30", station: "Voice of Vietnam", country: "VNM", lang: "German", site: "Son Tay", lat: 21.13, lon: 105.50, kw: 100, isChina: false },
+  { freq: 5985, start: "19:00", end: "21:30", station: "Myanma Radio", country: "MMR", lang: "Burmese/Eng", site: "Yangon", lat: 16.86, lon: 96.19, kw: 50, isChina: false },
+  { freq: 5990, start: "19:00", end: "22:00", station: "China Radio Int.", country: "CHN", lang: "Turkish/Eng", site: "Urumqi", lat: 43.82, lon: 87.61, kw: 500, isChina: true },
+  { freq: 9575, start: "20:00", end: "23:00", station: "Radio Cairo", country: "EGY", lang: "Arabic/English", site: "Abis", lat: 31.18, lon: 30.05, kw: 250, isChina: false },
+  { freq: 11780, start: "20:00", end: "23:59", station: "Rádio Nacional Amazônia", country: "BRA", lang: "Portuguese", site: "Brasília", lat: -15.60, lon: -47.90, kw: 100, isChina: false },
+  { freq: 9665, start: "21:00", end: "23:59", station: "Voz Missionária", country: "BRA", lang: "Portuguese", site: "Camboriú", lat: -27.02, lon: -48.65, kw: 10, isChina: false },
+  { freq: 4755, start: "21:00", end: "23:00", station: "Voice of Indonesia", country: "IDN", lang: "English", site: "Makassar", lat: -5.14, lon: 119.43, kw: 50, isChina: false },
+  { freq: 3320, start: "20:00", end: "23:00", station: "Radio Sondergrense", country: "ZAF", lang: "Afrikaans", site: "Meyerton", lat: -26.55, lon: 28.01, kw: 100, isChina: false },
+  { freq: 6676, start: "00:00", end: "23:59", station: "Bangkok / Mumbai VOLMET", country: "THA/IND", lang: "English (USB)", site: "Bangkok/Mumbai", lat: 13.75, lon: 100.50, kw: 10, isChina: false, mode: "USB" }
+];
+
+// QTH presety (fallback pro file:// protokol, kde prohlížeč blokuje GPS)
+// QTH se zadává přes GPS nebo ručně a ukládá se jen lokálně (localStorage,
+// per zařízení) - v repozitáři nejsou žádné přednastavené polohy.
+const QTH_KEY = 'dxr_qth_v1';
+function saveQth() {
+  try {
+    localStorage.setItem(QTH_KEY, JSON.stringify({
+      coords: document.getElementById('qthCoords').value,
+      alt:    document.getElementById('altitude').value,
+      az:     document.getElementById('azimuth').value,
+      rx:     document.getElementById('rxProfile').value
+    }));
+  } catch (e) { /* privátní režim bez storage */ }
+}
+function loadQth() {
+  try {
+    const q = JSON.parse(localStorage.getItem(QTH_KEY));
+    if (!q) return;
+    if (q.coords) document.getElementById('qthCoords').value = q.coords;
+    if (q.alt)    document.getElementById('altitude').value = q.alt;
+    if (q.az != null && q.az !== '') {
+      document.getElementById('azimuth').value = q.az;
+      document.getElementById('azVal').textContent = `${q.az}° (${compassDir(q.az)})`;
+    }
+    if (q.rx) document.getElementById('rxProfile').value = q.rx;
+  } catch (e) { /* ignoruj poškozený záznam */ }
+}
+
+// Bezpečné vkládání cizích dat do HTML (EiBi/HFCC/AOKI názvy, radio-browser.info)
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function safeUrl(u) {
+  const s = String(u == null ? '' : u).trim();
+  return /^https?:\/\//i.test(s) ? s : '';
+}
+
+// 2. SFÉRICKÁ MATEMATIKA (Vzdálenost a Azimut ortodromy)
+const toRad = deg => deg * Math.PI / 180;
+const toDeg = rad => (rad * 180 / Math.PI + 360) % 360;
+
+function calcGeodesic(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Poloměr Země v km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  const dist = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  const bearing = Math.round(toDeg(Math.atan2(y, x)));
+  return { dist, bearing };
+}
+
+function compassDir(az) {
+  const dirs = ['S', 'SSV', 'SV', 'VSV', 'V', 'VJV', 'JV', 'JJV', 'J', 'JJZ', 'JZ', 'ZJZ', 'Z', 'ZSZ', 'SZ', 'SSZ'];
+  return dirs[Math.round(az / 22.5) % 16];
+}
+
+// 3. KONTROLA ČASU V UTC
+const toMinutes = hhmm => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+
+function isTimeActive(startStr, endStr, nowMinutes) {
+  const s = toMinutes(startStr), e = toMinutes(endStr);
+  if (s === e) return true;
+  return s < e ? (nowMinutes >= s && nowMinutes < e) : (nowMinutes >= s || nowMinutes < e);
+}
+
+// 4. SLUNEČNÍ A GEOMAGNETICKÁ TELEMETRIE (NOAA SWPC)
+//    Při online připojení stáhne SFI a Kp; jinak použije klidový odhad (142 / 2).
+const SPACE_WX = { sfi: 142, kp: 2, live: false };
+
+function mufEstimate(sfi, utcHours) {
+  // Empirická heuristika: noční MUF ~ 6 + 0.09*SFI, denní +8 MHz (vrstva F2 nad Evropou)
+  const base = 6 + 0.09 * sfi;
+  return Math.round((utcHours >= 8 && utcHours <= 16 ? base + 8 : base));
+}
+
+function geomagLabel(kp) {
+  if (kp <= 3) return "Klidné";
+  if (kp === 4) return "Neklidné";
+  if (kp <= 6) return "Bouřka";
+  return "Extrémní bouře";
+}
+
+function propagationAdjust(freq, bearing, sfi, kp, utcHours) {
+  // Frekvenční okno LUF–MUF: co je nad MUF, vyletí do vesmíru (-35); hraniční -10.
+  const muf = mufEstimate(sfi, utcHours);
+  let adj = 0;
+  if (freq > muf * 1000 + 3000) adj -= 35;
+  else if (freq > muf * 1000 - 3000) adj -= 10;
+  // Polární/Aurorální absorpce při Kp >= 5 postihuje trasy severním sektorem (300°–60°)
+  if (kp >= 5) {
+    const inNorth = bearing >= 300 || bearing <= 60;
+    if (inNorth) adj -= 20;
+  }
+  return adj;
+}
+
+async function fetchSpaceWeather() {
+  if (window.location.protocol === 'file:') {
+    // file:// + CORS: použijeme klidový odhad, aby radar fungoval offline
+    SPACE_WX.live = false;
+    updateTelemetryBar();
+    return;
+  }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 8000);
+  const urls = {
+    sfi: "https://services.swpc.noaa.gov/products/summary/10cm-flux.json",
+    kp:  "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
+  };
+  const getJSON = async (u) => { const r = await fetch(u, { signal: ctrl.signal }); return r.json(); };
+  const [sfiR, kpR] = await Promise.allSettled([getJSON(urls.sfi), getJSON(urls.kp)]);
+  clearTimeout(t);
+  try {
+    if (sfiR.status === 'fulfilled' && sfiR.value) {
+      const v = sfiR.value;
+      // NOAA vrací buď pole [{"flux": 142, "time_tag": ...}], nebo {"Flux": "142"}
+      let flux = Array.isArray(v) && v.length ? v[v.length - 1].flux : v.Flux;
+      const n = parseInt(flux, 10);
+      if (n > 0) {
+        SPACE_WX.sfi = n;
+        SPACE_WX.live = true;
+      }
+    }
+  } catch (e) { /* fallback odhad */ }
+  try {
+    if (kpR.status === 'fulfilled' && Array.isArray(kpR.value) && kpR.value.length) {
+      const last = kpR.value[kpR.value.length - 1];
+      const kpVal = last.kp_index ?? last.est_kp ?? last.kp ?? last.Kp;
+      if (kpVal != null) {
+        SPACE_WX.kp = Math.round(Number(kpVal));
+        SPACE_WX.live = true;
+      }
+    }
+  } catch (e) { /* fallback odhad */ }
+  updateTelemetryBar();
+  evaluateStations();
+}
+
+function updateTelemetryBar() {
+  document.getElementById('twSfi').textContent = `SFI ${SPACE_WX.sfi}`;
+  document.getElementById('twKp').textContent = `Kp ${SPACE_WX.kp}`;
+  const now = new Date();
+  const muf = mufEstimate(SPACE_WX.sfi, now.getUTCHours());
+  document.getElementById('twMuf').textContent = `~${muf} MHz`;
+  document.getElementById('twCond').textContent = geomagLabel(SPACE_WX.kp) + (SPACE_WX.live ? " (live NOAA)" : " (offline odhad)");
+}
+
+// 5. HLAVNÍ VÝPOČETNÍ PIPELINE (Skórování a QRM analýza)
+let lastResults = [];   // pro polární radar
+let activeBand = "all";
+let activeSort = "freq";
+let activeChance = "all";
+let windowsSort = "time";
+
+// Klíč deduplikace: stejná stanice na stejné frekvenci (normalizovaný název),
+// aby se EiBi/HFCC/AOKI záznamy téhož vysílání nezdvojovaly.
+// Zkratky v názvu se rozbalují ("R.ROMANIA INT." == "Radio Romania International").
+const STATION_ALIAS = { R: "RADIO", RD: "RADIO", INT: "INTERNATIONAL", INTL: "INTERNATIONAL",
+  NATL: "NATIONAL", BC: "BROADCASTING", BR: "BROADCASTING", COMM: "COMMUNICATIONS", ORG: "ORGANIZATION" };
+function stationKey(st) {
+  const name = (st.station || "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ")
+    .split(/\s+/).filter(Boolean).map(w => STATION_ALIAS[w] || w).join("");
+  return `${st.freq}|${name}`;
+}
+
+function bandKey(freq) {
+  if (freq < 5006) return "tropo";
+  if (freq <= 6200) return "49";
+  if (freq <= 7450) return "41";
+  if (freq <= 9900) return "31";
+  if (freq <= 12100) return "25";
+  return "19";
+}
+
+// Výpočet šance jedné stanice proti zadanému stavu éteru (activeNow).
+// Hlavní výpis jí předává právě vysílající stanice; časová okna budoucí stav:
+// □ po startu stanice, 🔓 po vypnutí rušitele - ŠANCE tedy říká,
+// co bude slouchat po dané události.
+function scoreStation(st, env, activeNow) {
+  const { dist, bearing } = calcGeodesic(env.myLat, env.myLon, st.lat, st.lon);
+
+  // A. Kardioidní maska balkónu: rozdíl úhlů (0° = přímý výhled, 180° = za budovou)
+  let angleDiff = Math.abs(bearing - env.balconyAz);
+  if (angleDiff > 180) angleDiff = 360 - angleDiff;
+  const balconyBonus = Math.round(Math.cos(toRad(angleDiff)) * 25);
+
+  // B. Efekt nadmořské výšky (nízký vyzařovací úhel pomáhá stanicím nad 3500 km)
+  const altFactor = Math.min(env.alt / 1000, 1.5);
+  const takeOffBonus = dist > 3500 ? Math.round(altFactor * 15) : Math.round(altFactor * 5);
+
+  // B2. Korekce směrovosti vysílače (HFCC azimut antény)
+  let beamAdj = 0;
+  if (st.azimuth > 0) {
+    const brgTxToMe = calcGeodesic(st.lat, st.lon, env.myLat, env.myLon).bearing;
+    let delta = Math.abs(brgTxToMe - st.azimuth);
+    if (delta > 180) delta = 360 - delta;
+    beamAdj = delta <= 45 ? 8 : (delta <= 90 ? 0 : -15);
+  }
+
+  // C. Profil antény (60cm prut vs tropická pásma pod 5 MHz)
+  let antennaBonus = 0;
+  if (env.rxProfile === 'whip') {
+    if (st.freq < 5000) antennaBonus = -18;
+    else if (st.freq >= 9000 && st.freq <= 12000) antennaBonus = +12;
+  } else if (env.rxProfile === 'loop') {
+    if (st.freq < 7500) antennaBonus = +15;
+  }
+
+  // D. Výkon vysílače + E. ionosféra (SFI/Kp z NOAA)
+  const powerBonus = Math.round(Math.log10(st.kw) * 14);
+  const propAdj = propagationAdjust(st.freq, bearing, SPACE_WX.sfi, SPACE_WX.kp, env.utcHour);
+
+  // D2. Útlum vzdáleností (multi-hop): každý další skok ubírá signál.
+  // Bez něj dostávaly extrémně vzdálené stanice nereálně vysokou šanci
+  // (na prutové anténě z balkónu je stejně nechytneš). ~ -6 b / 1800 km nad 1000 km.
+  const distPenalty = dist > 1000 ? -Math.round((dist - 1000) / 1800 * 6) : 0;
+
+  // F. Detekce sousedního a kanálového rušení (ACI / Co-Channel QRM)
+  const qrmPlus5 = activeNow.find(other => other !== st && other.freq === st.freq + 5 && other.kw >= st.kw);
+  const qrmMinus5 = activeNow.find(other => other !== st && other.freq === st.freq - 5 && other.kw >= st.kw);
+  const coChannel = activeNow.find(other => other !== st && other.freq === st.freq && other.kw > st.kw);
+
+  let qrmPenalty = 0;
+  let pl330Tip = st.mode === "USB" ? "Režim USB, BFO 00 Hz, BW 2.5 kHz" : "AM, BW 3.5 kHz (Čistý kanál)";
+  let qrmFlag = false;
+
+  if (coChannel) {
+    qrmPenalty = -25;
+    qrmFlag = true;
+    pl330Tip = `Silné krytí (${coChannel.station} do ${coChannel.end} UTC). Čekej na vypnutí nosné!`;
+  } else if (qrmPlus5 && !qrmMinus5) {
+    qrmPenalty = -8;
+    qrmFlag = true;
+    pl330Tip = `QRM z ${st.freq+5} kHz (${qrmPlus5.station}) -> Přepni na LSB, BFO 00, BW 2.5 kHz!`;
+  } else if (qrmMinus5 && !qrmPlus5) {
+    qrmPenalty = -8;
+    qrmFlag = true;
+    pl330Tip = `QRM z ${st.freq-5} kHz (${qrmMinus5.station}) -> Přepni na USB, BFO 00, BW 2.5 kHz!`;
+  } else if (env.rxProfile === 'whip' && st.kw <= 50) {
+    pl330Tip = "Slabší DX -> Drž rádio v ruce u zábradlí, zkus ECSS (USB/LSB, BW 2.5 kHz)";
+  }
+
+  const score = Math.max(5, Math.min(99, 35 + balconyBonus + takeOffBonus + beamAdj + antennaBonus + powerBonus + propAdj + qrmPenalty + distPenalty));
+  return { dist, bearing, angleDiff: Math.round(angleDiff), score, pl330Tip, qrmFlag };
+}
+
+function evaluateStations() {
+  const [myLat, myLon] = document.getElementById('qthCoords').value.split(',').map(s => parseFloat(s.trim()));
+  // Bez platné polohy nelze počítat azimut/vzdálenost - vyzvi k zadání QTH
+  if (!Number.isFinite(myLat) || !Number.isFinite(myLon)) {
+    const sb = document.getElementById('statusBar');
+    if (sb) sb.innerHTML = '<span>📍 Zadej QTH: klepni na „Zjistit polohu (GPS)" nebo vepiš souřadnice (šířka, délka).</span>';
+    document.getElementById('stationList').innerHTML =
+      '<p style="color:var(--muted); padding:12px;">Nejdřív nastav svoji polohu (QTH) nahoře.</p>';
+    document.getElementById('targetsCount').textContent = '';
+    return;
+  }
+  const alt = parseFloat(document.getElementById('altitude').value) || 300;
+  const balconyAz = parseFloat(document.getElementById('azimuth').value) || 180;
+  const rxProfile = document.getElementById('rxProfile').value;
+  const hideChina = document.getElementById('hideChina').checked;
+  const simTime = document.getElementById('simTime').checked;
+
+  const now = new Date();
+  const utcMinutes = simTime ? (20 * 60 + 5) : (now.getUTCHours() * 60 + now.getUTCMinutes());
+  const timeLabel = simTime ? "20:05 UTC (Simulace)" : `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
+  document.getElementById('clock').textContent = timeLabel;
+
+  // Všechny právě vysílající stanice (včetně čínských pro detekci QRM!)
+  // Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech nejsilnější záznam,
+  // aby duplikáty nenafukovaly seznam ani nehlásily falešné krytí kanálu.
+  const seenActive = new Map();
+  for (const st of SCHEDULE_DB.filter(st => isTimeActive(st.start, st.end, utcMinutes))) {
+    const key = stationKey(st);
+    if (!seenActive.has(key) || st.kw > seenActive.get(key).kw) seenActive.set(key, st);
+  }
+  const activeAll = [...seenActive.values()];
+
+  const results = [];
+
+  const dayNum = simTime ? 3 : ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne (dnes: středa=3)
+
+  const env = { myLat, myLon, alt, balconyAz, rxProfile, utcHour: now.getUTCHours() };
+
+  for (const st of activeAll) {
+    if (hideChina && st.isChina) continue;
+    // Dny vysílání (HFCC pole days, např. "12" = jen pondělí a úterý)
+    if (st.days && !st.days.includes(String(dayNum))) continue;
+
+    results.push({
+      ...st, ...scoreStation(st, env, activeAll),
+      minsLeft: ((toMinutes(st.end) - utcMinutes) + 1440) % 1440
+    });
+  }
+
+  // Pod 30 % šance nemá na balkoně cenu ukazovat - skryjeme
+  const viable = results.filter(r => r.score >= 30);
+
+  // Tercily šance: rozdělení na třetiny podle pořadí ve skóre
+  // (remízy nerozbíjejí hranice - vždy tři neprázdné skupiny)
+  const byScore = [...viable].sort((a, b) => b.score - a.score);
+  const n3 = Math.ceil(byScore.length / 3);
+  const topKeys = new Set(byScore.slice(0, n3).map(stationKey));
+  const midKeys = new Set(byScore.slice(n3, 2 * n3).map(stationKey));
+  const sTop = n3 > 0 ? byScore[n3 - 1].score : 0;                    // nejslabší v top tercilu
+  const sMid = 2 * n3 <= byScore.length ? byScore[2 * n3 - 1].score : 0; // nejslabší ve středním
+  document.getElementById('chanceTop').textContent = `Nejlepší ⅓ (≥ ${sTop})`;
+  document.getElementById('chanceMid').textContent = `Střední ⅓ (${sMid}–${sTop})`;
+  document.getElementById('chanceLow').textContent = `Spodní ⅓ (< ${sMid})`;
+
+  // Filtr šance (tercily) + pásem (band pills)
+  const byChance = activeChance === "all" ? viable : viable.filter(r =>
+    activeChance === "top" ? topKeys.has(stationKey(r)) :
+    activeChance === "mid" ? midKeys.has(stationKey(r)) :
+    !topKeys.has(stationKey(r)) && !midKeys.has(stationKey(r)));
+  const filtered = activeBand === "all" ? byChance : byChance.filter(r => bandKey(r.freq) === activeBand);
+
+  // Řazení: kmitočet (výchozí) nebo šance na úlovek
+  if (activeSort === "score") filtered.sort((a, b) => b.score - a.score || a.freq - b.freq);
+  else filtered.sort((a, b) => a.freq - b.freq || b.score - a.score);
+  lastResults = filtered;
+
+  // Vykreslení textů
+  document.getElementById('statusBar').innerHTML = `
+    <span>Výškový zisk (${alt} m): +${(alt/300).toFixed(1)} dB na nízkém úhlu</span>
+    <span>Nalezeno cílů: ${filtered.length} / ${results.length} aktivních (skóre ≥ 30)</span>
+  `;
+  document.getElementById('targetsCount').textContent = filtered.length ? `(${filtered.length})` : '';
+
+  const listEl = document.getElementById('stationList');
+  listEl.innerHTML = filtered.map(r => {
+    const cid = `${r.freq}-${r.station.replace(/[^a-zA-Z0-9]/g, '')}`;
+    return `
+    <div class="station-card ${r.score >= 75 ? 'top-pick' : ''} ${r.qrmFlag ? 'qrm-warn' : ''}" id="card-${cid}">
+      <div class="st-header">
+        <span class="freq">${r.freq} kHz</span>
+        ${r.minsLeft <= 60 ? `<span class="ends-soon">⏹ KONČÍ ZA ${r.minsLeft} MIN!</span>` : ''}
+        <span class="score-badge" title="Heuristické skóre 5–99, ne pravděpodobnost">Skóre: <strong>${r.score}</strong> | Azimut: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
+      </div>
+      <div class="st-title">${escapeHtml(r.station)} (${escapeHtml(r.country)}) — ${escapeHtml(r.lang)}</div>
+      <div class="st-meta">
+        <div>Vysílač: <span>${escapeHtml(r.site)} (${r.kw} kW)</span></div>
+        <div>Vzdálenost: <span>${r.dist.toLocaleString('cs-CZ')} km</span></div>
+        <div>Čas (UTC): <span>${escapeHtml(r.start)}–${escapeHtml(r.end)}</span></div>
+        <div>Odchylka od balkónu: <span>${r.angleDiff}°</span></div>
+      </div>
+      <div class="pl330-advice">
+        <span>💡 <strong>PL-330:</strong> ${escapeHtml(r.pl330Tip)}</span>
+        <span style="display:flex; gap:5px; white-space:nowrap;">
+          <button class="log-btn" onclick="copyMarkdownLog(${r.freq}, '${r.station.replace(/'/g, "")}', '${r.site}', ${r.dist}, ${r.bearing})">📋 MD</button>
+          <button class="log-btn" onclick="toggleLogForm('${cid}')">📝 Log</button>
+          <button class="log-btn" onclick="toggleStreamBox('${cid}')">🎧 Stream</button>
+        </span>
+      </div>
+      <div class="log-form" id="logform-${cid}" style="display:none">
+        <span class="sinpo-lbl">SINPO (1–5):</span>
+        <label class="sinpo-lbl">S</label><input type="number" id="sin-s-${cid}" min="1" max="5" value="4">
+        <label class="sinpo-lbl">I</label><input type="number" id="sin-i-${cid}" min="1" max="5" value="4">
+        <label class="sinpo-lbl">N</label><input type="number" id="sin-n-${cid}" min="1" max="5" value="3">
+        <label class="sinpo-lbl">P</label><input type="number" id="sin-p-${cid}" min="1" max="5" value="3">
+        <label class="sinpo-lbl">O</label><input type="number" id="sin-o-${cid}" min="1" max="5" value="3">
+        <input type="text" id="lognote-${cid}" placeholder="Poznámka (volitelné)" style="flex:1; min-width:120px;">
+        <button class="log-btn" onclick="saveLogEntry('${cid}')">💾 Zapsat</button>
+      </div>
+      <div class="stream-box" id="streambox-${cid}" style="display:none">⏳ Vyhledávám webové streamy…</div>
+    </div>
+  `;}).join('');
+
+  renderUpcoming(activeAll, utcMinutes, hideChina, env, dayNum);
+  // radar: sektorové počty ze všech aktivních (vč. čínských skrytých dle filtru), tečky top cílů
+  const activeWithBearing = activeAll.map(st => ({
+    ...st, __bearing: calcGeodesic(myLat, myLon, st.lat, st.lon).bearing
+  }));
+  drawRadar(filtered, balconyAz, activeWithBearing);
+}
+
+// 6. ČASOVÁ OKNA (příští hodina) - budoucí události jako tabulka:
+// ▶ stanice, které startují; 🔓 kanály, kde silný rušitel brzy vypne.
+// ŠANCE se počítá proti budoucímu stavu éteru (▶ po startu, 🔓 po vypnutí
+// rušitele), takže okna jdou řadit i podle pravděpodobnosti úlovku.
+function renderUpcoming(activeAll, utcMinutes, hideChina, env, dayNum) {
+  const soon = m => m <= 60;
+  const items = [];
+  const seen = new Set();
+  const passesToday = st => !st.days || st.days.includes(String(dayNum));
+  const push = (st, t, typ, info, activeNow) => {
+    const key = stationKey(st);
+    if (seen.has(key)) return; // deduplikace napříč zdroji
+    seen.add(key);
+    const sc = scoreStation(st, env, activeNow);
+    items.push({ t, typ, freq: st.freq, station: st.station, kw: st.kw || 0, score: sc.score, info });
+  };
+
+  // a) 🔓 Kanály, kde silný rušitel brzy vypne a vyčistí frekvenci slabšímu DXovi
+  for (const st of SCHEDULE_DB) {
+    if (hideChina && st.isChina) continue;
+    if (!isTimeActive(st.start, st.end, utcMinutes)) continue;
+    if (!passesToday(st)) continue;
+    const stronger = activeAll.find(o => o !== st && o.freq === st.freq && o.kw > st.kw);
+    if (!stronger) continue;
+    if (stationKey(stronger) === stationKey(st)) continue; // duplikát téže stanice, ne rušitel
+    const clearIn = ((toMinutes(stronger.end) - utcMinutes) + 1440) % 1440;
+    if (!soon(clearIn)) continue;
+    // šance až po vyčištění kanálu: silnější rušitelé už nevysílají
+    const cleaned = activeAll.filter(o => !(o !== st && o.freq === st.freq && o.kw > st.kw));
+    push(st, clearIn, '🔓', `od ${stronger.end} UTC čistý kanál (vypíná ${stronger.station})`, cleaned);
+  }
+  // b) ▶ Stanice, které právě teď nejdou, ale startují v příští hodině
+  for (const st of SCHEDULE_DB) {
+    if (hideChina && st.isChina) continue;
+    if (isTimeActive(st.start, st.end, utcMinutes)) continue;
+    if (!passesToday(st)) continue;
+    const startsIn = ((toMinutes(st.start) - utcMinutes) + 1440) % 1440;
+    if (!soon(startsIn)) continue;
+    push(st, startsIn, '▶', `startuje v ${st.start} UTC`, activeAll);
+  }
+
+  // Řazení oken: čas (výchozí), kmitočet, výkon, šance
+  const sorters = {
+    time:  (a, b) => a.t - b.t,
+    freq:  (a, b) => a.freq - b.freq || a.t - b.t,
+    kw:    (a, b) => (b.kw || 0) - (a.kw || 0) || a.t - b.t,
+    score: (a, b) => b.score - a.score || a.t - b.t,
+  };
+  items.sort(sorters[windowsSort] || sorters.time);
+
+  const list = document.getElementById('upcomingList');
+  list.innerHTML = items.length ? `
+    <table class="windows-table">
+      <thead><tr><th>KDY</th><th>FREQ</th><th>STANICE</th><th>kW</th><th>SKÓRE</th></tr></thead>
+      <tbody>
+      ${items.map(i => `
+        <tr>
+          <td class="w-when">${i.typ} za ${i.t} min</td>
+          <td class="w-freq">${i.freq} kHz</td>
+          <td class="w-name"><strong>${escapeHtml(i.station)}</strong><span class="w-info">${escapeHtml(i.info)}</span></td>
+          <td class="w-kw">${i.kw}</td>
+          <td class="w-score"><strong>${i.score}</strong></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : '<div class="dim-line">Žádné časové okno v příští hodině.</div>';
+  document.getElementById('upcomingCount').textContent = items.length ? `(${items.length})` : '';
+}
+
+// 7. POLÁRNÍ RADAR - zjednodušený: 12 výsečí po 30° s počtem aktivních
+//    vysílačů ve směru + tečky top cílů (bez čísel, detail po klepnutí).
+const radarState = { hits: [] }; // pozice klikatelných teček pro interakci
+
+function drawRadar(results, balconyAz, activeAll) {
+  const canvas = document.getElementById('radarCanvas');
+  const ctx = canvas.getContext('2d');
+  const S = 270; // logická velikost (canvas je 2x pro ostrost)
+  ctx.setTransform(2, 0, 0, 2, 0, 0);
+  ctx.clearRect(0, 0, S, S);
+
+  const cx = S / 2, cy = S / 2, R = 118;
+
+  // Pozadí + jeden vnitřní kruh (orientace vzdálenosti: střed = blízko, okraj = daleko)
+  ctx.fillStyle = '#1a1713';
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#35302a';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, R / 2, 0, Math.PI * 2); ctx.stroke();
+
+  // 12 výsečí (30°): počet aktivních vysílačů ve směru -> sytost výseče
+  const SECTORS = 12, step = 360 / SECTORS;
+  const counts = new Array(SECTORS).fill(0);
+  for (const st of activeAll) {
+    if (st.isChina && document.getElementById('hideChina').checked) continue;
+    counts[Math.floor((((st.__bearing ?? st.bearing) || 0) % 360) / step) % SECTORS]++;
+  }
+  const maxCount = Math.max(...counts, 1);
+  for (let i = 0; i < SECTORS; i++) {
+    if (!counts[i]) continue;
+    const a1 = toRad(i * step - 90), a2 = toRad((i + 1) * step - 90);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, a1, a2);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(217, 168, 98, ${0.05 + 0.30 * counts[i] / maxCount})`;
+    ctx.fill();
+    // počet vysílačů uprostřed výseče (na vnějším okraji)
+    const midA = toRad((i + 0.5) * step - 90);
+    ctx.fillStyle = '#d9a862';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(counts[i]), cx + (R - 12) * Math.cos(midA), cy + (R - 12) * Math.sin(midA) + 4);
+    ctx.textAlign = 'left';
+  }
+
+  // Kříž + světové strany (sever nahoře)
+  ctx.strokeStyle = '#35302a';
+  ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+  ctx.fillStyle = '#a09688';
+  ctx.font = 'bold 12px monospace';
+  ctx.fillText('S', cx - 4, cy - R - 4);
+  ctx.fillText('J', cx - 4, cy + R + 14);
+  ctx.fillText('V', cx + R + 4, cy + 4);
+  ctx.fillText('Z', cx - R - 13, cy + 4);
+
+  // Sektor balkónu (obrys kardioidní masky ±45°)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  const b1 = toRad(balconyAz - 45 - 90), b2 = toRad(balconyAz + 45 - 90);
+  ctx.arc(cx, cy, R, b1, b2);
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(226, 145, 106, 0.55)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.lineWidth = 1;
+
+  // QTH uprostřed
+  ctx.fillStyle = '#e3ddd3';
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+
+  // Tečky jen TOP cílů (max 12, koresponduje se seznamem) - bez čísel,
+  // podrobnosti po klepnutí/tapnutí (radarInfo + skok na kartu).
+  radarState.hits = [];
+  const maxDist = Math.max(4000, ...results.map(r => r.dist));
+  results.slice(0, 12).forEach((r, idx) => {
+    const ang = toRad(r.bearing - 90); // 0° = sever -> nahoře
+    const rad = R * Math.min(1, r.dist / maxDist);
+    const x = cx + rad * Math.cos(ang);
+    const y = cy + rad * Math.sin(ang);
+    const color = r.qrmFlag ? '#d9a862' : (r.score >= 75 ? '#96c98f' : '#86bcb2');
+    const dotR = 4 + r.score / 40; // 4–6.5 px
+    ctx.strokeStyle = 'rgba(20, 17, 14, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, dotR, 0, Math.PI * 2); ctx.stroke(); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(x, y, dotR, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 1;
+    radarState.hits.push({ x, y, r, idx });
+  });
+}
+
+// Interakce s radarem: hover/click na tečku -> info + skok na kartu stanice
+function radarPick(ev) {
+  const canvas = document.getElementById('radarCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const mx = (ev.clientX - rect.left) * (270 / rect.width);
+  const my = (ev.clientY - rect.top) * (270 / rect.height);
+  let best = null, bestD = 14;
+  for (const h of radarState.hits) {
+    const d = Math.hypot(h.x - mx, h.y - my);
+    if (d < bestD) { bestD = d; best = h; }
+  }
+  return best;
+}
+
+document.getElementById('radarCanvas').addEventListener('mousemove', ev => {
+  const hit = radarPick(ev);
+  document.getElementById('radarInfo').textContent = hit
+    ? `${hit.r.freq} kHz | ${hit.r.station} | ${hit.r.dist} km | ${hit.r.bearing}° (${compassDir(hit.r.bearing)}) | Skóre ${hit.r.score}`
+    : 'Klikni na tečku na radaru…';
+});
+
+document.getElementById('radarCanvas').addEventListener('click', ev => {
+  const hit = radarPick(ev);
+  if (!hit) return;
+  document.querySelectorAll('.station-card.highlight').forEach(el => el.classList.remove('highlight'));
+  const cardId = `card-${hit.r.freq}-${hit.r.station.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const card = document.getElementById(cardId);
+  if (card) {
+    card.classList.add('highlight');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
+
+// 8. EXPORT DO OBSIDIANU / MARKDOWNU
+function copyMarkdownLog(freq, station, site, dist, bearing) {  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const utcStr = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
+  const alt = document.getElementById('altitude').value;
+  const rx = document.getElementById('rxProfile').options[document.getElementById('rxProfile').selectedIndex].text;
+
+  const md = `- **${freq} kHz** | **${station}** (${site}) | ${dateStr} ${utcStr} | ${dist} km (${bearing}°) | QTH: ${alt}m | RX: ${rx} | SINPO: `;
+  navigator.clipboard.writeText(md).then(() => {
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 2500);
+  }).catch(() => {
+    // file:// fallback: schránka bývá blokovaná - nabídne alespoň prompt k ručnímu kopírování
+    window.prompt('Schránka je blokovaná (file://). Zkopíruj ručně:', md);
+  });
+}
+
+// 8b. SWL DENÍK (SINPO logování do localStorage)
+const LOG_KEY = 'dxr_log_v1';
+
+function getLog() {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; }
+  catch (err) { return []; }
+}
+function setLog(log) {
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); }
+  catch (err) { alert('Log se nevešel do úložiště: ' + err.message); }
+}
+function updateLogBadge() {
+  document.getElementById('logCount').textContent = getLog().length;
+}
+function stationByCid(cid) {
+  return lastResults.find(r => `${r.freq}-${r.station.replace(/[^a-zA-Z0-9]/g, '')}` === cid);
+}
+function toggleLogForm(cid) {
+  const el = document.getElementById('logform-' + cid);
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+function saveLogEntry(cid) {
+  const st = stationByCid(cid);
+  if (!st) return;
+  const g = id => document.getElementById(id).value || '3';
+  const sinpo = ['s', 'i', 'n', 'p', 'o'].map(k => g(`sin-${k}-${cid}`)).join('');
+  const note = document.getElementById('lognote-' + cid).value.trim();
+  const now = new Date();
+  const log = getLog();
+  log.push({
+    ts: now.toISOString(),
+    date: now.toISOString().slice(0, 10),
+    utc: `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`,
+    freq: st.freq, station: st.station, country: st.country, site: st.site,
+    dist: st.dist, bearing: st.bearing, sinpo, note,
+    qth: document.getElementById('qthCoords').value,
+    alt: document.getElementById('altitude').value,
+    rx: document.getElementById('rxProfile').selectedOptions[0].text
+  });
+  setLog(log);
+  updateLogBadge();
+  toggleLogForm(cid);
+  const t = document.getElementById('toast');
+  t.textContent = `Zapsáno do deníku: ${st.station} (SINPO ${sinpo})`;
+  t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; t.textContent = 'Zkopírováno do schránky (Markdown)!'; }, 2500);
+}
+function toggleLogPanel(show) {
+  const p = document.getElementById('logPanel');
+  p.style.display = show ? 'block' : 'none';
+  if (show) renderLogEntries();
+}
+function renderLogEntries() {
+  const log = getLog().slice().reverse(); // nejnovější nahoře
+  const el = document.getElementById('logEntries');
+  if (!log.length) { el.innerHTML = '<p style="color:var(--muted)">Deník je prázdný — chytněte něco na PL-330 a zapište přes 📝 Log.</p>'; return; }
+  el.innerHTML = log.map((e, i) => {
+    const realIdx = log.length - 1 - i;
+    return `<div class="log-entry">
+      <span><strong>${e.freq} kHz</strong> | ${escapeHtml(e.station)} (${escapeHtml(e.country)}) | ${escapeHtml(e.date)} ${escapeHtml(e.utc)} UTC
+        | ${Number(e.dist).toLocaleString('cs-CZ')} km (${e.bearing}°) | QTH ${escapeHtml(e.alt)} m | RX: ${escapeHtml(e.rx)}
+        | SINPO: <span class="sinpo-str">${escapeHtml(e.sinpo)}</span>${e.note ? ' | 📝 ' + escapeHtml(e.note) : ''}</span>
+      <button class="del-btn" onclick="deleteLogEntry(${realIdx})" title="Smazat záznam">✖</button>
+    </div>`;
+  }).join('');
+}
+function deleteLogEntry(idx) {
+  const log = getLog();
+  log.splice(idx, 1);
+  setLog(log);
+  updateLogBadge();
+  renderLogEntries();
+}
+function exportLogMd() {
+  const log = getLog();
+  if (!log.length) return alert('Deník je prázdný.');
+  const md = log.map(e =>
+    `- **${e.freq} kHz** | **${e.station}** (${e.site}) | ${e.date} ${e.utc} UTC | ` +
+    `${e.dist.toLocaleString('cs-CZ')} km (${e.bearing}°) | QTH: ${e.alt}m | RX: ${e.rx} | ` +
+    `SINPO: ${e.sinpo}${e.note ? ' | ' + e.note : ''}`).join('\n');
+  navigator.clipboard.writeText(md).then(() => {
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 2500);
+  }).catch(() => window.prompt('Schránka blokovaná - zkopíruj ručně:', md));
+}
+document.getElementById('btnLog').addEventListener('click', () => toggleLogPanel(true));
+document.getElementById('btnLogExport').addEventListener('click', exportLogMd);
+document.getElementById('btnLogClear').addEventListener('click', () => {
+  if (getLog().length && confirm('Vymazat celý SWL deník?')) {
+    setLog([]); updateLogBadge(); renderLogEntries();
+  }
+});
+
+// 8c. OVĚŘENÍ PŘIJATÉ STANICE PŘES WEBOVÝ STREAM (radio-browser.info)
+// Na https stránce přehrajeme jen https streamy (mixed-content blokace).
+const streamCache = new Map(); // cid -> výsledky | 'none'
+
+function normalizeName(s) {
+  return s.toLowerCase().replace(/[^\w\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+async function lookupStreams(station) {
+  const base = normalizeName(station.replace(/\b(Corp|Company|Int'l|Inc\.?|Ltd\.?|Co\.)\b/g, ''));
+  const httpsOnly = window.location.protocol === 'https:';
+  const sig = base.split(' ').filter(w => w.length > 2);
+  // kaskáda dotazů: celý název -> první dvě slova -> nejdelší slovo
+  const queries = [base];
+  if (sig.length > 2) queries.push(sig.slice(0, 2).join(' '));
+  if (sig.length) queries.push(sig.reduce((a, b) => b.length > a.length ? b : a));
+
+  let all = [];
+  const tried = new Set();
+  for (const q of queries) {
+    if (!q || tried.has(q)) continue;
+    tried.add(q);
+    try {
+      const url = 'https://all.api.radio-browser.info/json/stations/byname/' +
+                  encodeURIComponent(q) + '?limit=40&hidebroken=true';
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) continue;
+      all = await r.json();
+      if (all.length) break;
+    } catch (err) { /* další dotaz */ }
+  }
+  if (!all.length) return [];
+  const matches = (list, strict) => list
+    .filter(s => s.url_resolved && (!httpsOnly || s.url_resolved.startsWith('https')))
+    .filter(s => {
+      const sn = normalizeName(s.name);
+      const hits = sig.filter(w => sn.includes(w)).length;
+      return strict ? (sn.includes(base) || hits >= Math.max(2, sig.length - 1))
+                    : hits >= 1;
+    })
+    .sort((a, b) => (b.votes || 0) - (a.votes || 0))
+    .slice(0, 3)
+    .map(st => ({ st, tier: strict ? 'exact' : 'loose' }));
+  const exact = matches(all, true);
+  const loose = matches(all, false).filter(m => !exact.some(x => x.st.stationuuid === m.st.stationuuid));
+  return exact.length ? [...exact, ...loose.slice(0, 2)] : loose;
+}
+
+async function toggleStreamBox(cid) {
+  const box = document.getElementById('streambox-' + cid);
+  if (box.style.display !== 'none') { // zavřít + stop případného přehrávání
+    box.querySelectorAll('audio').forEach(a => a.pause());
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  const st = stationByCid(cid);
+  if (!st) return;
+  if (!streamCache.has(cid)) {
+    try {
+      const found = await lookupStreams(st.station);
+      streamCache.set(cid, found);
+    } catch (err) {
+      streamCache.set(cid, 'error');
+    }
+  }
+  const res = streamCache.get(cid);
+  const google = `https://www.google.com/search?q=${encodeURIComponent(st.station + ' radio live stream')}`;
+  if (res === 'error' || (Array.isArray(res) && !res.length)) {
+    box.innerHTML = '❓ V databázi radio-browser.info nenalezeno nic přehravatelného.<br>' +
+      `<a href="${google}" target="_blank" rel="noopener" style="color:var(--cyan)">🔎 Vyhledat web stanice ručně</a>`;
+    return;
+  }
+  const exactN = res.filter(m => m.tier === 'exact').length;
+  box.innerHTML = '<div style="color:var(--muted); margin-bottom:4px;">🎧 Ověření ID přes web — srovnejte, zda slyšíte totéž co v éteru:</div>' +
+    (exactN ? '' : '<div style="color:var(--amber); margin-bottom:4px;">⚠ Přesnou shodu nelze najít, tohle jsou jen podobné stanice (posuzujte sluchem):</div>') +
+    res.map((m, i) => {
+      const hp = safeUrl(m.st.homepage);
+      const br = Number(m.st.bitrate);
+      return `
+      <div class="stream-item">
+        <span>${m.tier === 'exact' ? '✅' : '❔'} <strong>${escapeHtml(m.st.name)}</strong>
+          <span style="color:var(--muted)">[${escapeHtml(m.st.codec || '?')}${br ? ' ' + br + 'k' : ''}]</span>
+          ${hp ? `<a href="${escapeHtml(hp)}" target="_blank" rel="noopener noreferrer">🔗 web</a>` : ''}</span>
+        <button class="stream-play" onclick="playStream('${cid}', ${i})">▶ Přehrát</button>
+      </div>
+      <audio id="audio-${cid}-${i}" controls style="width:100%; display:none;" preload="none"></audio>
+    `;}).join('') +
+    `<div class="stream-item" style="border:none; padding-top:6px;">
+       <a href="${google}" target="_blank" rel="noopener" style="color:var(--cyan)">🔎 Nenajdu to tu — vyhledat web stanice</a>
+     </div>`;
+}
+function playStream(cid, idx) {
+  const res = streamCache.get(cid);
+  if (!Array.isArray(res)) return;
+  const audio = document.getElementById(`audio-${cid}-${idx}`);
+  // ztlumit ostatní přehrávače
+  document.querySelectorAll('.stream-box audio').forEach(a => {
+    if (a !== audio) { a.pause(); a.style.display = 'none'; }
+  });
+  if (audio.style.display === 'none') {
+    audio.src = res[idx].st.url_resolved;
+    audio.style.display = 'block';
+    audio.play().catch(() => alert('Stream se nepodařilo přehrát (kodek/blokace). Zkuste jiný odkaz nebo web stanice.'));
+  } else {
+    audio.pause();
+    audio.style.display = 'none';
+  }
+}
+
+// 9. SENZORY TELEFONU (GPS, Kompas) a IMPORT DAT — QTH se ukládá jen lokálně
+document.getElementById('azimuth').addEventListener('input', e => {
+  const v = parseInt(e.target.value, 10);
+  document.getElementById('azVal').textContent = `${v}° (${compassDir(v)})`;
+  saveQth();
+  evaluateStations();
+});
+
+['qthCoords', 'altitude', 'rxProfile', 'hideChina', 'simTime'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    saveQth();          // ruční zadání QTH → uložit lokálně (per zařízení)
+    evaluateStations();
+  });
+});
+
+// Přibližná poloha z IP (fallback, jen online) — použije se u file:// i při odmítnutí GPS
+function qthFromIp(reason) {
+  fetch('https://ipapi.co/json/').then(r => r.json()).then(d => {
+    if (d.latitude && d.longitude) {
+      document.getElementById('qthCoords').value = `${d.latitude.toFixed(4)}, ${d.longitude.toFixed(4)}`;
+      saveQth();
+      evaluateStations();
+      alert(`${reason} — použita přibližná poloha z IP (${d.city || '?'}, ±50 km). Pro přesnost zadej QTH ručně.`);
+    } else {
+      alert("Polohu se nepodařilo zjistit. Zadej souřadnice ručně do políčka QTH (šířka, délka).");
+    }
+  }).catch(() => alert("Polohu se nepodařilo zjistit. Zadej souřadnice ručně do políčka QTH (šířka, délka)."));
+}
+
+// GPS: na https (Pages/localhost) přesná poloha; u file:// je geolocation blokován → IP fallback
+document.getElementById('btnGps').addEventListener('click', () => {
+  if (window.location.protocol === 'file:' || !navigator.geolocation) {
+    qthFromIp("Přímá GPS není v tomto režimu dostupná");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude.toFixed(4);
+    const lon = pos.coords.longitude.toFixed(4);
+    document.getElementById('qthCoords').value = `${lat}, ${lon}`;
+    if (pos.coords.altitude) {
+      document.getElementById('altitude').value = Math.round(pos.coords.altitude);
+    }
+    saveQth();
+    evaluateStations();
+  }, err => {
+    qthFromIp(`GPS odmítnuta (${err.message})`);
+  }, { enableHighAccuracy: true, timeout: 8000 });
+});
+
+document.getElementById('btnCompass').addEventListener('click', async () => {
+  const btn = document.getElementById('btnCompass');
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch (e) { /* uživatel zamítl */ }
+  }
+  const samples = [];
+  const handler = (e) => {
+    let heading = null;
+    if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+      heading = e.webkitCompassHeading; // iOS: heading od magnetického severu
+    } else if (e.absolute && typeof e.alpha === 'number' && !isNaN(e.alpha)) {
+      heading = (360 - e.alpha) % 360; // Android: absolutní orientace (deviceorientationabsolute)
+    }
+    if (heading === null) return; // relativní deviceorientation bez kompasu ignorujeme
+    samples.push(heading);
+    if (samples.length >= 5) finish();
+  };
+  const finish = () => {
+    window.removeEventListener('deviceorientationabsolute', handler, true);
+    window.removeEventListener('deviceorientation', handler, true);
+    clearTimeout(timeoutId);
+    btn.textContent = '🧭 Zamknout azimut kompasem';
+    if (!samples.length) {
+      alert('Kompas nepodal platný údaj (zařízení bez magnetometru nebo bez oprávnění). Nastav azimut ručně posuvníkem.');
+      return;
+    }
+    // kruhový průměr vzorků (aby přechod 359°->1° nesrazil průměr přes jih)
+    const rad = samples.map(h => h * Math.PI / 180);
+    const avg = Math.round(((Math.atan2(rad.reduce((s, r) => s + Math.sin(r), 0),
+                                           rad.reduce((s, r) => s + Math.cos(r), 0))
+                             * 180 / Math.PI) + 360) % 360);
+    document.getElementById('azimuth').value = avg;
+    document.getElementById('azVal').textContent = `${avg}° (${compassDir(avg)})`;
+    saveQth();
+    evaluateStations();
+  };
+  const timeoutId = setTimeout(finish, 4000); // fallback: použij co je po 4 s
+  btn.textContent = '🧭 Čtu kompas…';
+  window.addEventListener('deviceorientationabsolute', handler, true); // Android Chrome
+  window.addEventListener('deviceorientation', handler, true); // iOS (webkitCompassHeading)
+});
+
+// Filtr pásem (band pills)
+document.querySelectorAll('#bandPills .band-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('#bandPills .band-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    activeBand = pill.dataset.band;
+    evaluateStations();
+  });
+});
+
+// Řazení stanic (kmitočet / šance) - druhá řada pills u filtru pásem
+document.querySelectorAll('#sortPills .band-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('#sortPills .band-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    activeSort = pill.dataset.sort;
+    evaluateStations();
+  });
+});
+
+// Tercily šance na úlovek (nejlepší / střední / spodní třetina cílů)
+document.querySelectorAll('#chancePills .band-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('#chancePills .band-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    activeChance = pill.dataset.chance;
+    evaluateStations();
+  });
+});
+
+// Řazení časových oken (tab ⏱): čas / kmitočet / výkon / šance
+document.querySelectorAll('#windowsSortPills .band-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('#windowsSortPills .band-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    windowsSort = pill.dataset.wsort;
+    evaluateStations();
+  });
+});
+
+// Taby hlavního obsahu: Cíle teď / Časová okna
+document.querySelectorAll('#mainTabs .main-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('#mainTabs .main-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-targets').hidden = tab.dataset.tab !== 'targets';
+    document.getElementById('tab-upcoming').hidden = tab.dataset.tab !== 'upcoming';
+  });
+});
+
+// Import kompletní databáze EiBi (JSON z eibi_sync.py nebo surové CSV z eibispace.de)
+let userImported = false; // ruční import má přednost před auto-načtením eibi.json
+
+// ITU kódy -> přibližné GPS vysílacího uzlu (port z eibi_sync.py)
+const COUNTRY_COORDS = {
+  MLI:[12.65,-8.00], TZA:[-6.10,39.26], ETH:[8.88,38.78], MDG:[-18.87,47.50], NGA:[9.05,7.49],
+  ZAF:[-26.55,28.01], EGY:[31.18,30.05], TUR:[39.93,32.85], GRC:[38.40,23.60], IRN:[29.45,55.68],
+  IND:[13.23,77.70], VNM:[21.13,105.50], MMR:[16.86,96.19], IDN:[-5.14,119.43], MYS:[2.99,101.78],
+  THA:[14.02,100.52], BRA:[-15.60,-47.90], CHN:[39.90,116.40], ROU:[44.75,26.10], ARS:[24.71,46.67],
+  OMA:[23.58,58.38], CUB:[22.95,-82.40], USA:[38.90,-77.00], KOR:[37.55,126.90], JPN:[35.68,139.69],
+  PHL:[14.58,120.97], AUS:[-33.87,151.21], CAN:[45.42,-75.70], GBR:[51.48,-0.45], FRA:[47.65,1.30],
+  DEU:[50.85,9.65], ESP:[40.42,-3.70], ITA:[41.90,12.50], PRT:[38.75,-9.15], NLD:[52.20,5.40],
+  BEL:[50.85,4.35], SWE:[59.33,18.07], NOR:[59.90,10.75], FIN:[60.45,25.00], RUS:[55.75,37.62],
+  UKR:[50.45,30.52], POL:[52.23,21.00], CZE:[50.09,14.30], SVK:[48.15,17.10], HUN:[47.50,19.05],
+  AUT:[48.20,16.37], SUI:[46.95,7.45], ISR:[31.90,34.90], JOR:[32.00,36.00], LBN:[33.90,35.50],
+  SYR:[33.50,36.30], IRQ:[33.30,44.40], PAK:[33.70,73.10], BGD:[23.80,90.40], LKA:[6.90,79.90],
+  NPL:[27.70,85.30], KAZ:[43.25,76.90], UZB:[41.30,69.25], TKM:[38.00,63.20], KGZ:[42.87,74.60],
+  TWN:[24.71,121.00], PRK:[39.00,125.75], MNG:[47.90,106.90], ARG:[-34.60,-58.38], CHL:[-33.45,-70.67],
+  PER:[-12.05,-77.00], COL:[4.60,-74.08], VEN:[10.50,-66.90], ECU:[-0.15,-78.35], BOL:[-16.50,-68.15],
+  PRY:[-25.28,-57.60], URY:[-34.90,-56.20], MEX:[19.40,-99.10], GTM:[14.60,-90.50], CRI:[9.90,-84.10],
+  HND:[14.10,-87.20], DZA:[36.75,3.05], LBY:[32.85,13.20], TUN:[36.80,10.18], MAR:[33.60,-7.60],
+  SDN:[15.60,32.50], SSD:[4.85,31.60], ERI:[15.33,38.93], DJI:[11.60,43.15], SOM:[2.05,45.33],
+  KEN:[-1.28,36.80], UGA:[0.32,32.60], COD:[-4.30,15.30], COG:[-4.25,15.25], CMR:[3.87,11.52],
+  GAB:[0.42,9.47], CIV:[6.70,-5.30], SEN:[14.70,-17.40], GHA:[5.60,-0.17], BFA:[12.35,-1.50],
+  ZMB:[-15.40,28.30], ZWE:[-17.80,31.05], MOZ:[-25.97,32.58], MWI:[-13.95,33.78], NAM:[-22.50,17.05],
+  AGO:[-8.80,13.25], GNQ:[3.75,8.78], ARE:[24.43,54.48], QAT:[25.28,51.52], KWT:[29.35,47.95],
+  BHR:[26.20,50.58], AFG:[34.50,69.20], BLR:[53.90,27.55], MDA:[47.00,28.85], SRB:[44.80,20.48],
+  HRV:[45.80,16.00], BIH:[43.85,18.40], SVN:[46.05,14.50], MKD:[41.98,21.43], BGR:[42.70,23.35],
+  ALB:[41.33,19.45], GEO:[41.70,44.80], ARM:[40.18,44.50], AZE:[40.40,49.85], IRL:[53.30,-6.30],
+  DNK:[56.30,9.50], ISL:[64.13,-21.90], LUX:[49.60,6.10], CYP:[35.15,33.38], MLT:[35.85,14.50],
+  PNG:[-9.45,147.20], NCL:[-22.28,166.40], VUT:[-17.75,168.30]
+};
+const CHINA_ITU = new Set(["CHN"]);
+const CHINA_PATTERNS = ["CRI", "China Radio", "CNR", "China National", "PBS ", "Voice of Strait", "Chinese"];
+
+// Parser surového sked-*.csv z eibispace.de (port z eibi_sync.py, bez závislostí)
+function parseEibiCsv(text) {
+  const records = [];
+  const rows = text.split(/\r?\n/);
+  for (const line of rows) {
+    const row = line.split(';');
+    if (row.length < 5) continue;
+    const freq = Math.round(parseFloat(row[0]));
+    if (!isFinite(freq) || freq < 2300 || freq > 26100) continue;
+    const timeRaw = row[1].trim();
+    if (!/^\d{4}-\d{4}$/.test(timeRaw)) continue;
+    const [s, en] = timeRaw.split('-');
+    const country = row[3].trim();
+    const station = row[4].trim();
+    if (!country || !station || !(country in COUNTRY_COORDS)) continue;
+    const [lat, lon] = COUNTRY_COORDS[country];
+    const isChina = CHINA_ITU.has(country) || CHINA_PATTERNS.some(p => station.includes(p));
+    records.push({
+      freq,
+      start: s.slice(0, 2) + ':' + s.slice(2),
+      end: en.slice(0, 2) + ':' + en.slice(2),
+      station,
+      country,
+      lang: (row[5] || '').trim(),
+      site: ((row[7] || '').trim()) || station,
+      lat, lon,
+      kw: isChina ? 500 : 100,
+      isChina
+    });
+  }
+  return records;
+}
+
+// HFCC (hfcc.org) - druhý velký seznam: přesné souřadnice vysílačů, výkony,
+// azimuty antén a dny vysílání. Port parseru z eibi_sync.py.
+const HFCC_LANG = {Eng:'English',Cmn:'Mandarin',Man:'Mandarin',Zho:'Chinese',Spa:'Spanish',
+Rus:'Russian',Ukr:'Ukrainian',Bel:'Belarusian',Urd:'Urdu',Per:'Persian',Dri:'Dari',Ara:'Arabic',
+Hin:'Hindi',Ben:'Bengali',Snd:'Sindhi',Pan:'Punjabi',Mar:'Marathi',Guj:'Gujarati',Tam:'Tamil',
+Tel:'Telugu',Kan:'Kannada',Mal:'Malayalam',Nld:'Dutch',Dch:'Dutch',Fre:'French',Ger:'German',
+Ita:'Italian',Por:'Portuguese',Pol:'Polish',Cze:'Czech',Slk:'Slovak',Hun:'Hungarian',
+Rom:'Romanian',Bul:'Bulgarian',Ser:'Serbian',Cro:'Croatian',Alb:'Albanian',Mac:'Macedonian',
+Sln:'Slovenian',Gre:'Greek',Tur:'Turkish',Vtn:'Vietnamese',Tha:'Thai',Bur:'Burmese',
+Sin:'Sinhala',Kmr:'Khmer',Lao:'Lao',Kor:'Korean',Jpn:'Japanese',Uzn:'Uzbek',Kaz:'Kazakh',
+Amh:'Amharic',Oro:'Oromo',Som:'Somali',Swa:'Swahili',Hau:'Hausa',Yor:'Yoruba',Ful:'Fulani',
+Tgl:'Tagalog',Ind:'Indonesian',Mly:'Malay',Swd:'Swedish',Nor:'Norwegian',Dan:'Danish',
+Fin:'Finnish',Est:'Estonian',Lat:'Latvian',Lit:'Lithuanian',Heb:'Hebrew',Aze:'Azerbaijani',
+Arm:'Armenian',Geo:'Georgian',Uig:'Uyghur',Tib:'Tibetan',Mon:'Mongolian',Pas:'Pashto',
+Nep:'Nepali',Ass:'Assamese',Ory:'Odia',Bis:'Bislama',Cat:'Catalan',Gln:'Galician',Ice:'Icelandic'};
+
+function parseHfccSite(text) {
+  // site.txt: KÓD Název místa  ADM  lat(46N57) lon(001E59)
+  const sites = {};
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/^(\S+)\s+(.+?)\s+([A-Z]{1,3})\s+(\d{2})([NS])(\d{2})\s+(\d{3})([EW])(\d{2})/);
+    if (!m) continue;
+    let lat = parseInt(m[4], 10) + parseInt(m[6], 10) / 60;
+    let lon = parseInt(m[7], 10) + parseInt(m[9], 10) / 60;
+    if (m[5] === 'S') lat = -lat;
+    if (m[8] === 'W') lon = -lon;
+    sites[m[1]] = { name: m[2].trim(), lat: Math.round(lat * 1000) / 1000, lon: Math.round(lon * 1000) / 1000 };
+  }
+  return sites;
+}
+
+function parseHfccTable(text) {
+  // admin/broadcas tabulky: KÓD (3 znaky) + název
+  const out = {};
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith(';')) continue;
+    const code = line.slice(0, 3).trim();
+    const name = line.slice(3, 53).trim() || line.slice(3).trim();
+    if (code && name && /[A-Za-z]/.test(code[0])) out[code] = name;
+  }
+  return out;
+}
+
+function hfccTdateExpired(t) {
+  // TDATE je DDMMYY (270327 = 27. 3. 2027)
+  if (!/^\d{6}$/.test(t)) return false;
+  const end = new Date(Date.UTC(2000 + parseInt(t.slice(4), 10), parseInt(t.slice(2, 4), 10) - 1, parseInt(t.slice(0, 2), 10)));
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return end < today;
+}
+
+function parseHfccSchedule(text, sites, brc) {
+  // Řádky mají proměnnou šířku polí (CIRAF/ZONES, AFRQ) - parsuje se regexem
+  // ukotveným na strukturu: FREQ STRT STOP ... LOC POWR AZIM SLW ANT DAYS FDATE TDATE MOD ...
+  const rowRx = new RegExp('^\\s*(\\d{4,5})\\s+(\\d{4})\\s+(\\d{4})\\s+' +
+    '.*?\\s+([A-Z0-9-]{1,5})\\s+' +
+    '(\\d{1,4})\\s+(\\d{1,3})\\s+(\\d)\\s+(\\d{1,4})\\s+(\\d{1,7})\\s+' +
+    '(\\d{6})\\s+(\\d{6})\\s+([A-Z])\\s+' +
+    '(?:(\\d{4,5})\\s+)?' +
+    '(?:([A-Za-z]{3})\\s+)?' +
+    '(.*)$');
+  const records = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith(';')) continue;
+    const m = line.match(rowRx);
+    if (!m) continue;
+    const [_, freqS, startR, endR, loc, powrS, azimS, _slw, _ant, days, _fd, tdate, _mod, _afrq, langCode, tail] = m;
+    const freq = parseInt(freqS, 10);
+    if (freq < 2300 || freq > 26100) continue;
+    if (hfccTdateExpired(tdate)) continue;
+    if (!sites[loc]) continue;
+    const site = sites[loc];
+    const kw = (/^\d+$/.test(powrS) && parseInt(powrS, 10) > 0) ? parseInt(powrS, 10) : 100;
+    const azimuth = /^\d+$/.test(azimS) ? parseInt(azimS, 10) : 0;
+    const tokens = tail.trim().split(/\s+/).filter(Boolean);
+    const adm = tokens[0] || '';
+    const brcCode = tokens[1] || tokens[0] || '';
+    const station = (brcCode && brc[brcCode]) ? brc[brcCode] : (brcCode || site.name);
+    const lc = (langCode || '').charAt(0).toUpperCase() + (langCode || '').slice(1).toLowerCase();
+    const isChina = adm === 'CHN' || CHINA_PATTERNS.some(p => station.includes(p));
+    records.push({
+      freq,
+      start: startR.slice(0, 2) + ':' + startR.slice(2),
+      end: endR.slice(0, 2) + ':' + endR.slice(2),
+      station,
+      country: adm,
+      lang: HFCC_LANG[lc] || (lc || '?'),
+      site: site.name,
+      lat: site.lat, lon: site.lon,
+      kw,
+      isChina,
+      azimuth,
+      days: (days === '' || days === '1234567') ? '' : days
+    });
+  }
+  return records;
+}
+
+// Lokální uložiště: PWA si pamatuje naposledy stažená/importovaná data.
+// Spolu s databází se ukládá i metadata (zdroj + sezóna), aby se po refreshi
+// nezobrazovalo zavádějící "EiBi" a aby se stará sezóna nepřemíchávala s čerstvou.
+const DB_KEY = 'dxr_db_v1';
+const DB_META_KEY = 'dxr_db_meta_v1';
+
+function saveLocalDb(db, meta) {
+  try {
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    localStorage.setItem(DB_META_KEY, JSON.stringify(meta || {}));
+    localStorage.setItem(DB_KEY + '_ts', new Date().toISOString());
+    return true;
+  } catch (err) {
+    alert('Data se nevešla do lokálního úložiště (' + err.message + ').');
+    return false;
+  }
+}
+function loadLocalDb() {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    const db = raw ? JSON.parse(raw) : null;
+    return Array.isArray(db) && db.length ? db : null;
+  } catch (err) { return null; }
+}
+function loadLocalDbMeta() {
+  try { return JSON.parse(localStorage.getItem(DB_META_KEY)) || {}; }
+  catch (err) { return {}; }
+}
+function dbTimestamp() {
+  try { return localStorage.getItem(DB_KEY + '_ts'); } catch (err) { return null; }
+}
+function expectedSeason() {
+  const now = new Date();
+  const m = now.getUTCMonth() + 1, d = now.getUTCDate();
+  const winter = (m >= 11) || (m <= 2) || (m === 10 && d >= 25) || (m === 3 && d <= 25);
+  return winter ? 'b26' : 'a26';
+}
+
+function useDatabase(db, label) {
+  SCHEDULE_DB = db;
+  userImported = true;
+  evaluateStations();
+  document.getElementById('radarInfo').textContent = `${label}: ${db.length} záznamů`;
+}
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const text = ev.target.result;
+    if (/\.csv$/i.test(file.name)) {
+      const db = parseEibiCsv(text);
+      if (!db.length) return alert('Z CSV nebyl rozpoznán žádný záznam (čeká se sked-*.csv z eibispace.de).');
+      saveLocalDb(db, { source: 'EiBi (import CSV)', season: 'a26/b26 dle souboru' });
+      useDatabase(db, `Import ${file.name}`);
+      alert(`Načteno ${db.length} záznamů z CSV EiBi a uloženo do prohlížeče.`);
+    } else {
+      try {
+        const db = JSON.parse(text);
+        if (!Array.isArray(db) || !db.length) throw new Error('prázdné pole');
+        saveLocalDb(db, { source: `Import ${file.name}`, season: '?' });
+        useDatabase(db, `Import ${file.name}`);
+        alert(`Načteno ${db.length} záznamů a uloženo do prohlížeče.`);
+      } catch (err) { alert('Neplatný JSON/CSV soubor.'); }
+    }
+  };
+  reader.readAsText(file);
+});
+
+// Online synchronizace rozvrhů bez Pythonu: HFCC (přesné souřadnice, azimuty,
+// dny, B26) má přednost, EiBi CSV doplňuje jako fallback.
+// Oba servery neposílají CORS hlavičky, proto každé URL zkoušíme:
+// 1) přímo, 2) Jina reader (text + CORS), 3) allorigins proxy.
+async function fetchTextVia(url) {
+  const attempts = [
+    url,
+    'https://r.jina.ai/' + url,
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
+  ];
+  for (const attempt of attempts) {
+    try {
+      const r = await fetch(attempt, { cache: 'no-store' });
+      if (!r.ok) continue;
+      let text = await r.text();
+      const cut = text.indexOf('Markdown Content:'); // předmluva Jina readeru
+      if (cut !== -1) text = text.slice(cut + 'Markdown Content:'.length);
+      if (text.length > 500) return text;
+    } catch (err) { /* další transport */ }
+  }
+  return null;
+}
+
+function seasonCandidates() {
+  const now = new Date();
+  const m = now.getUTCMonth() + 1, d = now.getUTCDate();
+  const winter = (m >= 11) || (m <= 2) || (m === 10 && d >= 25) || (m === 3 && d <= 25);
+  return winter ? ['b26', 'a26'] : ['a26', 'b26'];
+}
+
+async function syncFromHfcc(season) {
+  const base = 'http://www.hfcc.org/data/' + season + '/';
+  const sched = await fetchTextVia(base + season.toUpperCase() + 'all00.TXT');
+  if (!sched) return null;
+  const siteTxt = await fetchTextVia(base + 'site.txt');
+  if (!siteTxt) return null;
+  const brcTxt = await fetchTextVia(base + 'broadcas.txt');
+  const records = parseHfccSchedule(sched, parseHfccSite(siteTxt), brcTxt ? parseHfccTable(brcTxt) : {});
+  return records.length >= 100 ? records : null;
+}
+
+// Online synchronizace rozvrhů bez Pythonu:
+//   1) z repozitáře eibi.json (+ meta) - tam je slitvina HFCC + AOKI,
+//      AOKI existuje jen v ZIPu, který prohlížeč neumí rozbalit;
+//   2) čerstvý HFCC z hfcc.org (přesné souřadnice, azimuty, dny);
+//   3) sloučení: čerstvý HFCC má přednost, repo doplní AOKI stanice;
+//   4) fallback: EiBi CSV z eibispace.de.
+// Repo data se použijí jen při shodě sezóny (stará sezóna by míchala duchy).
+function mergeDedup(primary, secondary) {
+  const seen = new Set(primary.map(r => `${r.freq}|${r.start}|${r.end}`));
+  const out = [...primary];
+  let added = 0;
+  for (const r of secondary) {
+    const key = `${r.freq}|${r.start}|${r.end}`;
+    if (seen.has(key)) continue;
+    out.push(r); seen.add(key); added++;
+  }
+  return { merged: out, added };
+}
+
+async function fetchRepoDb() {
+  let meta = null, db = null;
+  try {
+    const mr = await fetch('eibi.meta.json', { cache: 'no-store' });
+    if (mr.ok) meta = await mr.json();
+  } catch (err) { /* bez metadat - repo nepoužijeme pro merge */ }
+  try {
+    const r = await fetch('eibi.json', { cache: 'no-store' });
+    if (r.ok) db = await r.json();
+  } catch (err) { /* offline */ }
+  return (Array.isArray(db) && db.length) ? { db, meta } : null;
+}
+
+async function syncFromEibi(season) {
+  const text = await fetchTextVia('http://eibispace.de/dx/sked-' + season + '.csv');
+  if (!text) return null;
+  const records = parseEibiCsv(text);
+  return records.length >= 100 ? records : null;
+}
+
+document.getElementById('btnSync').addEventListener('click', async () => {
+  const btn = document.getElementById('btnSync');
+  btn.disabled = true;
+  btn.textContent = '⏳ Stahuji…';
+  const info = document.getElementById('radarInfo');
+  const expected = expectedSeason();
+  try {
+    // 1) repo (HFCC+AOKI slitvina) - rychlé, stejný server
+    info.textContent = '⏳ Načítám data z repozitáře…';
+    const repo = await fetchRepoDb();
+    const repoFresh = repo && repo.meta && repo.meta.season === expected;
+
+    // 2) čerstvý HFCC online (zdroj přesných souřadnic/azimutů)
+    let hfcc = null;
+    for (const season of seasonCandidates()) {
+      info.textContent = `⏳ Stahuji HFCC ${season.toUpperCase()}…`;
+      hfcc = await syncFromHfcc(season);
+      if (hfcc) break;
+    }
+
+    // 3) sloučení všech tří zdrojů: čerstvý HFCC má přednost, repo doplní
+    //    AOKI stanice, online EiBi CSV doplní zbytek (priorita HFCC > AOKI > EiBi)
+    if (hfcc) {
+      const srcList = ['HFCC ' + expected.toUpperCase()];
+      let db = hfcc;
+      if (repoFresh) {
+        const { merged, added } = mergeDedup(db, repo.db);
+        db = merged;
+        if (added) srcList.push('AOKI ' + expected.toUpperCase() + ' (z repa)');
+      }
+      // EiBi jen se shodnou sezónou - mixování sezón by vytvářelo duchy
+      info.textContent = `⏳ Stahuji EiBi ${expected.toUpperCase()}…`;
+      const eibi = await syncFromEibi(expected);
+      if (eibi) {
+        const { merged, added } = mergeDedup(db, eibi);
+        db = merged;
+        if (added) srcList.push('EiBi ' + expected.toUpperCase());
+      }
+      saveLocalDb(db, { source: srcList.join(' + '), season: expected });
+      useDatabase(db, srcList.join(' + '));
+      const ts = dbTimestamp();
+      info.textContent = `Staženo ${db.length} záznamů: ${srcList.join(' + ')} (${ts ? ts.slice(0, 10) : 'dnes'})`;
+    } else if (repoFresh) {
+      // HFCC online nedostupné: repo (HFCC+AOKI) + online EiBi se shodnou sezónou
+      let db = repo.db;
+      const srcList = ['Repo (HFCC+AOKI, bez online)'];
+      info.textContent = `⏳ Stahuji EiBi ${expected.toUpperCase()}…`;
+      const eibi = await syncFromEibi(expected);
+      if (eibi) {
+        const { merged, added } = mergeDedup(db, eibi);
+        db = merged;
+        if (added) srcList.push('EiBi ' + expected.toUpperCase());
+      }
+      saveLocalDb(db, { source: srcList.join(' + '), season: expected });
+      useDatabase(db, srcList.join(' + '));
+    } else {
+      // 4) poslední záchrana: EiBi CSV
+      let eibi = null, eibiSeason = null;
+      for (const season of seasonCandidates()) {
+        info.textContent = `⏳ Stahuji EiBi ${season.toUpperCase()}…`;
+        eibi = await syncFromEibi(season);
+        if (eibi) { eibiSeason = season; break; }
+      }
+      if (eibi) {
+        saveLocalDb(eibi, { source: 'EiBi ' + eibiSeason.toUpperCase(), season: eibiSeason });
+        useDatabase(eibi, 'EiBi ' + eibiSeason.toUpperCase() + ' (fallback)');
+        info.textContent = `Staženo ${eibi.length} záznamů z EiBi ${eibiSeason.toUpperCase()} (HFCC nedostupné)`;
+      } else {
+        info.textContent = 'Online stažení se nepovedlo.';
+        alert('Rozvrh se nepodařilo stáhnout online (HFCC offline, repozitář bez správné sezóny).\n\n' +
+              'Ruční cesta: v prohlížeči si stáhni http://www.hfcc.org/data/b26/B26all00.TXT + ' +
+              'site.txt (případně http://eibispace.de/dx/sked-b26.csv) a naimportuj tlačítkem 📂.');
+      }
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⬇️ Stáhnout rozvrh';
+  }
+});
+
+// 10. START
+// Při servování přes http(s) (GitHub Pages, localhost) se automaticky dotáhne
+// kompletní databáze EiBi - nejprve z lokálního uložiště (naposledy synchronizovaná),
+// pak ze souboru eibi.json v repozitáři (vygeneruje eibi_sync.py --sync).
+async function autoLoadSchedule() {
+  if (window.location.protocol === 'file:') return; // u file:// fetch blokován - zůstává vzorek/import
+  const local = loadLocalDb();
+  if (local) {
+    useDatabase(local, 'Lokální uložiště');
+    return;
+  }
+  const info = document.getElementById('radarInfo');
+  info.textContent = '⏳ Načítám databázi rozvrhů (eibi.json, ~1.3 MB)…';
+  try {
+    const r = await fetch('eibi.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const db = await r.json();
+    if (Array.isArray(db) && db.length && !userImported) {
+      SCHEDULE_DB = db;
+      evaluateStations();
+      info.textContent = `Načteno ${db.length} záznamů EiBi (eibi.json)`;
+    }
+  } catch (err) {
+    // offline / chybný hosted soubor - ať to nestraší jako "málo dat"
+    info.textContent = '⚠️ Rozvrh se nenačetl (offline?) - běží vestavěný vzorek. ' +
+                       'Zkus ⬇️ Stáhnout rozvrh nebo 📂 import.';
+  }
+}
+
+loadQth();                     // obnoví naposledy zadané QTH (jen z tohoto zařízení)
+updateTelemetryBar();          // offline odhad hned, poté se dosadí live NOAA data
+updateLogBadge();               // počet zapsaných úlovků v deníku
+fetchSpaceWeather();            // async - po stažení přepočítá skóre
+evaluateStations();
+autoLoadSchedule();             // async - dotáhne plnou DB EiBi, pokud existuje
+setInterval(evaluateStations, 30000);
+
+// Service Worker: po první návštěvě přes https funguje PWA i offline (letadlový režim).
+// Po vydání nové verze: SW se na pozadí updatuje a tato stránka se sama reloadne
+// (guard přes sessionStorage zabraňuje smyčce reloadů).
+if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    try {
+      if (sessionStorage.getItem('dxr_reloaded')) return;
+      sessionStorage.setItem('dxr_reloaded', '1');
+    } catch (e) { /* privátní režim bez storage - riskneme jeden reload */ }
+    reloading = true;
+    location.reload();
+  });
+  // zrušit guard po minutě, aby se příští aktualizace projevila taky
+  setTimeout(() => { try { sessionStorage.removeItem('dxr_reloaded'); } catch (e) {} }, 60000);
+}
+</script>
+</body>
+</html>
