@@ -8,7 +8,31 @@
   <link rel="icon" href="icon-192.png" type="image/png">
   <title>DX Radar Pro // Kontextový SWL Engine</title>
   <style>
+    /* ── MOTIVY ──────────────────────────────────────────────────────────────
+       Výchozí = „Vibe" (svěží, živá oranžová/korálová na chladné tmavé).
+       data-theme="night" = původní retro (jantar/rez). data-theme="light" = světlý.
+       Barvy jsou tokeny; radar i chipy je čtou, takže přepnutí obarví vše.      */
     :root {
+      --bg: #13151a;
+      --panel: #1a1d24;
+      --card: #20242d;
+      --border: #2d323d;
+      --border-hi: #3d4350;
+      --text: #f1ede5;
+      --muted: #99a0ad;
+      --accent: #ff7a3d;   /* mistral vibe orange */
+      --amber: #ffb24d;
+      --green: #6fd38a;
+      --cyan: #5fd0c6;
+      --glow: radial-gradient(1200px 600px at 100% -10%, rgba(255,122,61,.12) 0%, rgba(255,122,61,0) 60%);
+      --radar-bg: #171a20;
+      --radar-grid: #2d323d;
+      --badge-bg: #26211b;
+      --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Roboto Mono', ui-monospace, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --shadow: 0 1px 3px rgba(0,0,0,.35), 0 4px 16px rgba(0,0,0,.22);
+    }
+    :root[data-theme="night"] {
       --bg: #12100d;
       --panel: #1b1815;
       --card: #211d19;
@@ -20,16 +44,33 @@
       --amber: #e3b26a;
       --green: #9fd398;
       --cyan: #8ec7bd;
-      --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Roboto Mono', ui-monospace, monospace;
-      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      --shadow: 0 1px 3px rgba(0,0,0,.35), 0 4px 16px rgba(0,0,0,.22);
+      --glow: radial-gradient(1200px 600px at 100% -10%, #1c1813 0%, rgba(28,24,19,0) 60%);
+      --radar-bg: #1a1713;
+      --radar-grid: #35302a;
+      --badge-bg: #2a241e;
+    }
+    :root[data-theme="light"] {
+      --bg: #f7f3ec;
+      --panel: #fffdf9;
+      --card: #ffffff;
+      --border: #e4dccd;
+      --border-hi: #d2c6b2;
+      --text: #262019;
+      --muted: #756c5e;
+      --accent: #e4572e;
+      --amber: #b9780a;
+      --green: #2f8f4e;
+      --cyan: #1b8578;
+      --glow: radial-gradient(1200px 600px at 100% -10%, rgba(228,87,46,.08) 0%, rgba(228,87,46,0) 60%);
+      --radar-bg: #fbf7f0;
+      --radar-grid: #e0d6c5;
+      --badge-bg: #f0e7d8;
+      --shadow: 0 1px 3px rgba(80,60,40,.12), 0 4px 16px rgba(80,60,40,.10);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { overflow-x: hidden; max-width: 100%; }
     body {
-      background:
-        radial-gradient(1200px 600px at 100% -10%, #1c1813 0%, rgba(28,24,19,0) 60%),
-        var(--bg);
+      background: var(--glow), var(--bg);
       color: var(--text);
       font-family: var(--sans);
       font-size: 16px;
@@ -55,7 +96,7 @@
     }
     .brand { display: flex; align-items: center; gap: 10px; }
     h1 { font-size: 17px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
-    .badge-ver { background: #2a241e; color: var(--amber); padding: 2px 6px; border-radius: 3px; font-size: 11px; border: 1px solid var(--border-hi); }
+    .badge-ver { background: var(--badge-bg); color: var(--amber); padding: 2px 6px; border-radius: 3px; font-size: 11px; border: 1px solid var(--border-hi); }
     .clock-box { font-size: 18px; font-weight: bold; color: var(--amber); }
 
     /* Rychlé QTH presety */
@@ -309,6 +350,38 @@
     .st-meta { font-size: 14px; color: var(--muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 10px; }
     .st-meta span { color: var(--text); }
 
+    /* Rozklad skóre do složek (po váhách) – rychlý pohled, proč stanice má dané skóre */
+    .score-parts { display: flex; flex-wrap: wrap; gap: 5px 7px; margin-bottom: 6px; }
+    .score-parts span {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px; color: var(--muted);
+      background: #1b1813; border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 999px; white-space: nowrap;
+    }
+
+    /* Ladicí panel (details) – slidery vah + blacklist */
+    details.tuning {
+      grid-column: 1 / -1; background: #17140f;
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+    }
+    details.tuning > summary {
+      cursor: pointer; font-weight: 600; color: var(--text); list-style: none;
+      display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    }
+    details.tuning > summary::-webkit-details-marker { display: none; }
+    details.tuning > summary::before { content: '▸'; color: var(--muted); }
+    details.tuning[open] > summary::before { content: '▾'; }
+    .tuning-body { padding-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+    .slider-row { display: flex; flex-direction: column; gap: 3px; }
+    .slider-row label { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+    .slider-row .wval { color: var(--amber); font-family: ui-monospace, Menlo, monospace; }
+    #blText {
+      width: 100%; box-sizing: border-box; resize: vertical; min-height: 90px;
+      background: #0f0d0a; color: var(--text); border: 1px solid var(--border);
+      border-radius: 4px; padding: 7px 8px; font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+    }
+    #blStatus { font-weight: 400; }
+
     .pl330-advice {
       background: #1a1712;
       border: 1px dashed var(--border);
@@ -408,7 +481,7 @@
     }
     header { padding-bottom: 10px; }
     h1 { font-size: 19px; letter-spacing: .3px; text-transform: none; color: var(--text); font-weight: 700; }
-    .badge-ver { background: linear-gradient(180deg, #2f2820, #241f19); align-self: center; }
+    .badge-ver { background: var(--badge-bg); align-self: center; }
     .clock-box { font-size: 20px; }
 
     /* Frekvence jako hlavní akcent karty */
@@ -482,6 +555,7 @@
   </div>
   <div class="header-right">
     <div class="clock-box" id="clock">--:-- UTC</div>
+    <button type="button" class="btn-sm" id="btnTheme" title="Přepnout barevný motiv">🎨 <span id="themeName">Vibe</span></button>
     <button type="button" class="btn-sm" id="btnLog">📖 Log (<span id="logCount">0</span>)</button>
   </div>
 </header>
@@ -501,11 +575,19 @@
       <input type="number" id="altitude" value="" step="10" placeholder="300">
     </div>
     <div class="control-group">
-      <label>Sestava (RX + anténa)</label>
-      <select id="rxProfile">
-        <option value="whip">PL-330 + Prut (60cm)</option>
-        <option value="wire">PL-330 + Dlouhý drát</option>
-        <option value="loop">PL-330 + Smyčka MLA-30+</option>
+      <label>Přijímač</label>
+      <select id="rxSelect">
+        <option value="pl330">Tecsun PL-330</option>
+        <option value="airspy">Airspy HF+ Discovery (SDR)</option>
+        <option value="ats4732">Mini ATS-4732 V3 (Si4732)</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Anténa</label>
+      <select id="antSelect">
+        <option value="whip">Prut 60 cm</option>
+        <option value="wire">7m drát na cívce</option>
+        <option value="youloop">YouLoop (pasivní smyčka)</option>
       </select>
     </div>
     <div class="control-group full">
@@ -513,6 +595,53 @@
       <input type="range" id="azimuth" min="0" max="359" value="180">
       <button type="button" class="action-btn" id="btnCompass" style="margin-top:6px;">🧭 Zamknout azimut kompasem</button>
     </div>
+
+    <!-- Ladění skóre: posuvníky vah + minimální skóre (uloží se lokálně) -->
+    <details class="tuning" id="tuningBox">
+      <summary>⚙️ Ladění skóre (váhy)</summary>
+      <div class="tuning-body">
+        <div class="slider-row">
+          <label>Směrovost balkonu <span class="wval" id="wBalconyVal">1.0×</span></label>
+          <input type="range" id="wBalcony" min="0" max="2" step="0.1" value="1">
+        </div>
+        <div class="slider-row">
+          <label>Výkon vysílače <span class="wval" id="wPowerVal">0.6×</span></label>
+          <input type="range" id="wPower" min="0" max="2" step="0.1" value="0.6">
+        </div>
+        <div class="slider-row">
+          <label>Vzdálenost / skip <span class="wval" id="wSkipVal">1.0×</span></label>
+          <input type="range" id="wSkip" min="0" max="2" step="0.1" value="1">
+        </div>
+        <div class="slider-row">
+          <label>Propagace (MUF, D-vrstva) <span class="wval" id="wPropVal">1.0×</span></label>
+          <input type="range" id="wProp" min="0" max="2" step="0.1" value="1">
+        </div>
+        <div class="slider-row">
+          <label>Min. skóre (skrýt pod) <span class="wval" id="minScoreVal">30</span></label>
+          <input type="range" id="minScore" min="0" max="90" step="5" value="30">
+        </div>
+        <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="action-btn" id="btnWeightsReset">↺ Výchozí váhy</button>
+          <button type="button" class="action-btn" id="btnWeightsCopy">📋 Kopírovat váhy (JSON)</button>
+        </div>
+      </div>
+    </details>
+
+    <!-- Blacklist: jeden přepínatelný seznam (název NEBO kód země) -->
+    <details class="tuning" id="blacklistBox">
+      <summary>🚫 Blacklist stanic <span id="blStatus" class="wval"></span></summary>
+      <div class="tuning-body">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="blOn" checked> Blacklist zapnutý
+        </label>
+        <label style="margin-top:6px;">Vzory — jeden na řádek, matchuje <strong>název</strong> stanice nebo <strong>kód země</strong> (CHN, RUS, …):</label>
+        <textarea id="blText" rows="6" spellcheck="false" placeholder="CHN&#10;RUS&#10;for new organization"></textarea>
+        <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="action-btn" id="btnBlReset">↺ Výchozí seznam</button>
+        </div>
+      </div>
+    </details>
+
     <div class="btn-row" style="display:flex; gap:8px; grid-column: 1/-1; margin-top:2px;">
       <button type="button" class="action-btn" id="btnSync">⬇️ Stáhnout aktuální rozvrh</button>
     </div>
@@ -530,11 +659,6 @@
 
   <!-- 3) Filtry (na mobilu pod grafem) -->
   <section class="controls filters">
-    <div class="control-group full" style="flex-direction: row; align-items: center; gap: 15px;">
-      <label style="display:flex; align-items:center; gap:5px; cursor:pointer; color:var(--text);">
-        <input type="checkbox" id="hideChina" checked> Odfiltrovat čínské vysílače (CRI/CNR)
-      </label>
-    </div>
     <div class="control-group full">
       <label>Filtr pásem</label>
       <div class="band-pills" id="bandPills">
@@ -650,7 +774,8 @@ function saveQth() {
       coords: document.getElementById('qthCoords').value,
       alt:    document.getElementById('altitude').value,
       az:     document.getElementById('azimuth').value,
-      rx:     document.getElementById('rxProfile').value
+      rx:     document.getElementById('rxSelect').value,
+      ant:    document.getElementById('antSelect').value
     }));
   } catch (e) { /* privátní režim bez storage */ }
 }
@@ -664,8 +789,21 @@ function loadQth() {
       document.getElementById('azimuth').value = q.az;
       document.getElementById('azVal').textContent = `${q.az}° (${compassDir(q.az)})`;
     }
-    if (q.rx) document.getElementById('rxProfile').value = q.rx;
+    // Migrace starého jediného pole „rx" (whip/wire/loop) na přijímač+anténu
+    const rxSel = document.getElementById('rxSelect'), antSel = document.getElementById('antSelect');
+    if (q.ant) { antSel.value = q.ant; if (q.rx) rxSel.value = q.rx; }
+    else if (q.rx === 'whip' || q.rx === 'wire' || q.rx === 'loop') {
+      antSel.value = q.rx === 'loop' ? 'whip' : q.rx; // MLA-30+ není YouLoop → bezpečně na prut
+      rxSel.value = 'pl330';
+    } else if (q.rx) { rxSel.value = q.rx; }
   } catch (e) { /* ignoruj poškozený záznam */ }
+}
+
+// Popisek sestavy (přijímač + anténa) pro deník a MD export
+function rigLabel() {
+  const rx = document.getElementById('rxSelect');
+  const ant = document.getElementById('antSelect');
+  return `${rx.selectedOptions[0].text} + ${ant.selectedOptions[0].text}`;
 }
 
 // Bezpečné vkládání cizích dat do HTML (EiBi/HFCC/AOKI názvy, radio-browser.info)
@@ -678,8 +816,57 @@ function safeUrl(u) {
   return /^https?:\/\//i.test(s) ? s : '';
 }
 
-// Barevná třída skóre (zelená = dobré, amber = střední, tlumená = slabé)
-function scoreClass(s) { return s >= 70 ? 'sc-hi' : s >= 45 ? 'sc-mid' : 'sc-lo'; }
+// Barevná třída skóre dle tercilů dané chvíle (zelená = top ⅓, amber = střední, tlumená = spodní).
+// Tercily se počítají z živého rozdělení, takže barvy sedí i po změně vah/antény/přijímače.
+function scoreClass(s, sTop, sMid) {
+  if (sTop == null) return s >= 70 ? 'sc-hi' : s >= 45 ? 'sc-mid' : 'sc-lo';
+  return s >= sTop ? 'sc-hi' : s >= sMid ? 'sc-mid' : 'sc-lo';
+}
+
+// Krátký rozklad skóre do karty – jen nenulové složky, se znaménkem.
+const PART_LABELS = { balcony: 'balkón', beam: 'míření', ant: 'anténa', rx: 'RX',
+  power: 'výkon', prop: 'propag.', skip: 'skip', qrm: 'QRM', takeoff: 'výška' };
+function fmtParts(p) {
+  if (!p) return '';
+  return Object.entries(p).filter(([, v]) => v).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .map(([k, v]) => `<span>${PART_LABELS[k] || k} ${v > 0 ? '+' : ''}${v}</span>`).join('');
+}
+
+// ── Blacklist (skryté stanice) ──────────────────────────────────────────────
+// Jeden přepínatelný seznam vzorů; vzor matchuje NÁZEV stanice NEBO kód země
+// (case-insensitive, substring). Zapnutý = shoda vypadne úplně (i z QRM/radaru).
+const BL_KEY = 'dxr_blacklist_v1';
+const BL_ON_KEY = 'dxr_blacklist_on_v1';
+const BLACKLIST_DEFAULT = [
+  'CHN', 'TIB', 'CRI', 'CNR', 'china radio',          // Čína a čínské relaye
+  'for new organization', 'new organization', 'disaster relief', // HFCC placeholdery
+  'unknown'
+];
+let BLACKLIST = [];      // pole stringů (lowercase)
+let BLACKLIST_ON = true; // přepínač
+function loadBlacklist() {
+  try {
+    const raw = localStorage.getItem(BL_KEY);
+    BLACKLIST = (raw != null ? JSON.parse(raw) : BLACKLIST_DEFAULT).map(s => String(s).toLowerCase().trim()).filter(Boolean);
+    const on = localStorage.getItem(BL_ON_KEY);
+    BLACKLIST_ON = on == null ? true : on === '1';
+  } catch (e) { BLACKLIST = BLACKLIST_DEFAULT.map(s => s.toLowerCase()); BLACKLIST_ON = true; }
+}
+function saveBlacklist() {
+  try {
+    localStorage.setItem(BL_KEY, JSON.stringify(BLACKLIST));
+    localStorage.setItem(BL_ON_KEY, BLACKLIST_ON ? '1' : '0');
+  } catch (e) { /* privátní režim */ }
+}
+function isBlacklisted(st) {
+  if (!BLACKLIST_ON || !BLACKLIST.length) return false;
+  const hay = ((st.station || '') + ' ' + (st.country || '')).toLowerCase();
+  const cc = (st.country || '').toLowerCase();
+  for (const p of BLACKLIST) {
+    if (cc === p || hay.includes(p)) return true;
+  }
+  return false;
+}
 
 // 2. SFÉRICKÁ MATEMATIKA (Vzdálenost a Azimut ortodromy)
 const toRad = deg => deg * Math.PI / 180;
@@ -852,7 +1039,28 @@ function bandKey(freq) {
 // Hlavní výpis jí předává právě vysílající stanice; časová okna budoucí stav:
 // □ po startu stanice, 🔓 po vypnutí rušitele - ŠANCE tedy říká,
 // co bude slouchat po dané události.
+// Skip-zóna (přeskok): jedním skokem signál na vyšších pásmech dopadne daleko,
+// takže blízká stanice na vysoké frekvenci ti PŘELETÍ nad hlavou (mrtvá zóna).
+// Práh mrtvé zóny roste s frekvencí; nad ním navíc multi-hop útlum (na prut/portativ
+// se dálkové skoky těžko chytají). Vrací ZÁPORNÉ body (0 = bez penalizace).
+function skipTerm(freq, dist) {
+  const fMHz = freq / 1000;
+  const floor = Math.min(Math.max((fMHz - 7) * 300, 0), 4000); // km, strop 4000
+  let s = 0;
+  if (dist < floor) s -= Math.round((floor - dist) / floor * 30); // v mrtvé zóně
+  if (dist > 3000) s -= Math.round((dist - 3000) / 2000 * 8);     // multi-hop útlum
+  return s;
+}
+
+// Citlivost přijímače (plochý posun; Airspy navíc zprovozní pasivní YouLoop)
+const RX_BONUS = { pl330: 0, airspy: 12, ats4732: -6 };
+// Výchozí váhy sliderů (0–2×); přepisuje je uživatel a ukládají se lokálně
+const WEIGHTS = { balcony: 1.0, power: 0.6, skip: 1.0, prop: 1.0 };
+const SCORE_BASE = 50;
+
 function scoreStation(st, env, activeNow) {
+  const w = env.weights || WEIGHTS;
+  const f = st.freq;
   const { dist, bearing } = calcGeodesic(env.myLat, env.myLon, st.lat, st.lon);
 
   // A. Kardioidní maska balkónu: rozdíl úhlů (0° = přímý výhled, 180° = za budovou)
@@ -873,33 +1081,37 @@ function scoreStation(st, env, activeNow) {
     beamAdj = delta <= 45 ? 8 : (delta <= 90 ? 0 : -15);
   }
 
-  // C. Profil antény (60cm prut vs tropická pásma pod 5 MHz)
+  // C. Profil antény × pásmo (prut 60cm / 7m drát na cívce / pasivní YouLoop)
   let antennaBonus = 0;
-  if (env.rxProfile === 'whip') {
-    if (st.freq < 5000) antennaBonus = -18;
-    else if (st.freq >= 9000 && st.freq <= 12000) antennaBonus = +12;
-  } else if (env.rxProfile === 'loop') {
-    if (st.freq < 7500) antennaBonus = +15;
+  if (env.ant === 'whip') {
+    antennaBonus = f < 5000 ? -18 : f < 9000 ? -6 : f < 15000 ? 10 : 4;
+  } else if (env.ant === 'wire') {               // širokopásmový zisk, nejvíc dole/středně
+    antennaBonus = f < 5000 ? 8 : f < 10000 ? 12 : f < 18000 ? 4 : 0;
+  } else if (env.ant === 'youloop') {            // pasivní, bez zisku – citlivý null na QRM
+    antennaBonus = f < 7000 ? -15 : f < 15000 ? -6 : -4;
+    if (env.rx === 'airspy') antennaBonus += 14; // citlivý SDR pasivní loop zprovozní
   }
 
-  // D. Výkon vysílače + E. ionosféra (SFI/Kp z NOAA)
-  const powerBonus = Math.round(Math.log10(st.kw) * 14);
-  const propAdj = propagationAdjust(st.freq, bearing, SPACE_WX.sfi, SPACE_WX.kp, env.utcHour);
+  // C2. Citlivost přijímače (PL-330 baseline / Airspy HF+ / ATS-4732)
+  const rxBonus = RX_BONUS[env.rx] != null ? RX_BONUS[env.rx] : 0;
 
-  // D2. Útlum vzdáleností (multi-hop): každý další skok ubírá signál.
-  // Bez něj dostávaly extrémně vzdálené stanice nereálně vysokou šanci
-  // (na prutové anténě z balkónu je stejně nechytneš). ~ -6 b / 1800 km nad 1000 km.
-  const distPenalty = dist > 1000 ? -Math.round((dist - 1000) / 1800 * 6) : 0;
+  // D. Výkon vysílače vycentrovaný na 100 kW (100 kW = 0; neslouží jako konstantní offset)
+  const powerBonus = Math.round(Math.log10(Math.max(st.kw, 1) / 100) * 14);
+  // E. ionosféra (SFI/Kp z NOAA) + denní D-absorpce = propagační člen (jeden slider)
+  const propAdj = propagationAdjust(f, bearing, SPACE_WX.sfi, SPACE_WX.kp, env.utcHour);
+  const dayAbsorb = dayAbsorption(f, env.myLat, env.myLon, st.lat, st.lon, env.now || new Date());
 
-  // D3. Denní absorpce D-vrstvy na nízkých pásmech (osvětlená trasa).
-  const dayAbsorb = dayAbsorption(st.freq, env.myLat, env.myLon, st.lat, st.lon, env.now || new Date());
+  // D2. Skip-zóna + multi-hop útlum (nahrazuje starý lineární distPenalty)
+  const skip = skipTerm(f, dist);
 
   // F. Detekce sousedního a kanálového rušení (ACI / Co-Channel QRM)
-  const qrmPlus5 = activeNow.find(other => other !== st && other.freq === st.freq + 5 && other.kw >= st.kw);
-  const qrmMinus5 = activeNow.find(other => other !== st && other.freq === st.freq - 5 && other.kw >= st.kw);
-  const coChannel = activeNow.find(other => other !== st && other.freq === st.freq && other.kw > st.kw);
+  const qrmPlus5 = activeNow.find(other => other !== st && other.freq === f + 5 && other.kw >= st.kw);
+  const qrmMinus5 = activeNow.find(other => other !== st && other.freq === f - 5 && other.kw >= st.kw);
+  const coChannel = activeNow.find(other => other !== st && other.freq === f && other.kw > st.kw);
 
   let qrmPenalty = 0;
+  const isLoop = env.ant === 'youloop';
+  const rxName = env.rx === 'airspy' ? 'Airspy' : env.rx === 'ats4732' ? 'ATS-4732' : 'PL-330';
   let pl330Tip = st.mode === "USB" ? "Režim USB, BFO 00 Hz, BW 2.5 kHz" : "AM, BW 3.5 kHz (Čistý kanál)";
   let qrmFlag = false;
 
@@ -910,17 +1122,33 @@ function scoreStation(st, env, activeNow) {
   } else if (qrmPlus5 && !qrmMinus5) {
     qrmPenalty = -8;
     qrmFlag = true;
-    pl330Tip = `QRM z ${st.freq+5} kHz (${qrmPlus5.station}) -> Přepni na LSB, BFO 00, BW 2.5 kHz!`;
+    pl330Tip = `QRM z ${f+5} kHz (${qrmPlus5.station}) -> LSB, BFO 00, BW 2.5 kHz!`;
   } else if (qrmMinus5 && !qrmPlus5) {
     qrmPenalty = -8;
     qrmFlag = true;
-    pl330Tip = `QRM z ${st.freq-5} kHz (${qrmMinus5.station}) -> Přepni na USB, BFO 00, BW 2.5 kHz!`;
-  } else if (env.rxProfile === 'whip' && st.kw <= 50) {
-    pl330Tip = "Slabší DX -> Drž rádio v ruce u zábradlí, zkus ECSS (USB/LSB, BW 2.5 kHz)";
+    pl330Tip = `QRM z ${f-5} kHz (${qrmMinus5.station}) -> USB, BFO 00, BW 2.5 kHz!`;
+  } else if (isLoop) {
+    pl330Tip = "YouLoop: otoč smyčkou a zalaď null na rušič (figure-8).";
+  } else if (env.ant === 'whip' && st.kw <= 50) {
+    pl330Tip = `Slabší DX -> připoj drát/loop, ${rxName} drž u zábradlí, zkus ECSS (USB/LSB, BW 2.5 kHz)`;
   }
+  // YouLoop má směrový null – potlačí QRM na polovinu
+  if (isLoop) qrmPenalty = Math.round(qrmPenalty / 2);
 
-  const score = Math.max(5, Math.min(99, 35 + balconyBonus + takeOffBonus + beamAdj + antennaBonus + powerBonus + propAdj + qrmPenalty + distPenalty + dayAbsorb));
-  return { dist, bearing, angleDiff: Math.round(angleDiff), score, pl330Tip, qrmFlag };
+  const raw = SCORE_BASE + rxBonus
+    + balconyBonus * w.balcony
+    + takeOffBonus + beamAdj + antennaBonus
+    + powerBonus * w.power
+    + (propAdj + dayAbsorb) * w.prop
+    + skip * w.skip
+    + qrmPenalty;
+  const score = Math.max(5, Math.min(99, Math.round(raw)));
+  return {
+    dist, bearing, angleDiff: Math.round(angleDiff), score, pl330Tip, qrmFlag,
+    parts: { balcony: Math.round(balconyBonus * w.balcony), takeoff: takeOffBonus, beam: beamAdj,
+      ant: antennaBonus, rx: rxBonus, power: Math.round(powerBonus * w.power),
+      prop: Math.round((propAdj + dayAbsorb) * w.prop), skip: Math.round(skip * w.skip), qrm: qrmPenalty }
+  };
 }
 
 function evaluateStations() {
@@ -941,14 +1169,15 @@ function evaluateStations() {
   }
   const alt = parseFloat(document.getElementById('altitude').value) || 300;
   const balconyAz = parseFloat(document.getElementById('azimuth').value) || 180;
-  const rxProfile = document.getElementById('rxProfile').value;
-  const hideChina = document.getElementById('hideChina').checked;
+  const rx = document.getElementById('rxSelect').value;
+  const ant = document.getElementById('antSelect').value;
+  const minScore = parseInt(document.getElementById('minScore').value, 10) || 0;
 
-  // Všechny právě vysílající stanice (včetně čínských pro detekci QRM!)
+  // Blacklist (název NEBO kód země) – skryté stanice vypadnou úplně, i z QRM/radaru.
   // Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech nejsilnější záznam,
   // aby duplikáty nenafukovaly seznam ani nehlásily falešné krytí kanálu.
   const seenActive = new Map();
-  for (const st of SCHEDULE_DB.filter(st => isTimeActive(st.start, st.end, utcMinutes))) {
+  for (const st of SCHEDULE_DB.filter(st => isTimeActive(st.start, st.end, utcMinutes) && !isBlacklisted(st))) {
     const key = stationKey(st);
     if (!seenActive.has(key) || st.kw > seenActive.get(key).kw) seenActive.set(key, st);
   }
@@ -958,10 +1187,9 @@ function evaluateStations() {
 
   const dayNum = ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne
 
-  const env = { myLat, myLon, alt, balconyAz, rxProfile, utcHour: now.getUTCHours(), now };
+  const env = { myLat, myLon, alt, balconyAz, rx, ant, weights: WEIGHTS, utcHour: now.getUTCHours(), now };
 
   for (const st of activeAll) {
-    if (hideChina && st.isChina) continue;
     // Dny vysílání (HFCC pole days, např. "12" = jen pondělí a úterý)
     if (st.days && !st.days.includes(String(dayNum))) continue;
 
@@ -971,8 +1199,8 @@ function evaluateStations() {
     });
   }
 
-  // Pod 30 % šance nemá na balkoně cenu ukazovat - skryjeme
-  const viable = results.filter(r => r.score >= 30);
+  // Pod zvolené minimální skóre nemá cenu ukazovat (posuvník, výchozí 30)
+  const viable = results.filter(r => r.score >= minScore);
 
   // Tercily šance: rozdělení na třetiny podle pořadí ve skóre
   // (remízy nerozbíjejí hranice - vždy tři neprázdné skupiny)
@@ -1001,19 +1229,20 @@ function evaluateStations() {
   // Vykreslení textů
   document.getElementById('statusBar').innerHTML = `
     <span>Výškový zisk (${alt} m): +${(alt/300).toFixed(1)} dB na nízkém úhlu</span>
-    <span>Nalezeno cílů: ${filtered.length} / ${results.length} aktivních (skóre ≥ 30)</span>
+    <span>Nalezeno cílů: ${filtered.length} / ${results.length} aktivních (skóre ≥ ${minScore})</span>
   `;
   document.getElementById('targetsCount').textContent = filtered.length ? `(${filtered.length})` : '';
 
   const listEl = document.getElementById('stationList');
   listEl.innerHTML = filtered.map(r => {
     const cid = `${r.freq}-${r.station.replace(/[^a-zA-Z0-9]/g, '')}`;
+    const isTop = topKeys.has(stationKey(r));
     return `
-    <div class="station-card ${r.score >= 75 ? 'top-pick' : ''} ${r.qrmFlag ? 'qrm-warn' : ''}" id="card-${cid}">
+    <div class="station-card ${isTop ? 'top-pick' : ''} ${r.qrmFlag ? 'qrm-warn' : ''}" id="card-${cid}">
       <div class="st-header">
         <span class="freq">${r.freq} kHz</span>
         ${r.minsLeft <= 60 ? `<span class="ends-soon">⏹ KONČÍ ZA ${r.minsLeft} MIN!</span>` : ''}
-        <span class="score-badge" title="Heuristické skóre 5–99, ne pravděpodobnost">Skóre: <strong class="${scoreClass(r.score)}">${r.score}</strong> | Azimut: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
+        <span class="score-badge" title="Heuristické skóre 5–99, ne pravděpodobnost">Skóre: <strong class="${scoreClass(r.score, sTop, sMid)}">${r.score}</strong> | Azimut: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
       </div>
       <div class="st-title">${escapeHtml(r.station)} (${escapeHtml(r.country)}) — ${escapeHtml(r.lang)}</div>
       <div class="st-meta">
@@ -1022,8 +1251,9 @@ function evaluateStations() {
         <div>Čas (UTC): <span>${escapeHtml(r.start)}–${escapeHtml(r.end)}</span></div>
         <div>Odchylka od směru: <span>${r.angleDiff}°</span></div>
       </div>
+      <div class="score-parts" title="Z čeho se skóre skládá (po váhách). Uprav posuvníky v nastavení.">${fmtParts(r.parts)}</div>
       <div class="pl330-advice">
-        <span>💡 <strong>PL-330:</strong> ${escapeHtml(r.pl330Tip)}</span>
+        <span>💡 ${escapeHtml(r.pl330Tip)}</span>
         <span style="display:flex; gap:5px; white-space:nowrap;">
           <button class="log-btn" onclick="copyMarkdownLog('${cid}')">📋 MD</button>
           <button class="log-btn" onclick="toggleLogForm('${cid}')">📝 Log</button>
@@ -1044,8 +1274,9 @@ function evaluateStations() {
     </div>
   `;}).join('');
 
-  renderUpcoming(activeAll, utcMinutes, hideChina, env, dayNum);
-  // radar: sektorové počty ze všech aktivních (vč. čínských skrytých dle filtru), tečky top cílů
+  renderUpcoming(activeAll, utcMinutes, env, dayNum, topKeys);
+  // radar: sektorové počty ze všech aktivních (blacklist už odfiltrován), tečky top cílů
+  filtered.forEach(r => { r.isTop = topKeys.has(stationKey(r)); });
   const activeWithBearing = activeAll.map(st => ({
     ...st, __bearing: calcGeodesic(myLat, myLon, st.lat, st.lon).bearing
   }));
@@ -1056,7 +1287,7 @@ function evaluateStations() {
 // ▶ stanice, které startují; 🔓 kanály, kde silný rušitel brzy vypne.
 // ŠANCE se počítá proti budoucímu stavu éteru (▶ po startu, 🔓 po vypnutí
 // rušitele), takže okna jdou řadit i podle pravděpodobnosti úlovku.
-function renderUpcoming(activeAll, utcMinutes, hideChina, env, dayNum) {
+function renderUpcoming(activeAll, utcMinutes, env, dayNum, topKeys) {
   const soon = m => m <= 60;
   const items = [];
   const seen = new Set();
@@ -1071,7 +1302,7 @@ function renderUpcoming(activeAll, utcMinutes, hideChina, env, dayNum) {
 
   // a) 🔓 Kanály, kde silný rušitel brzy vypne a vyčistí frekvenci slabšímu DXovi
   for (const st of SCHEDULE_DB) {
-    if (hideChina && st.isChina) continue;
+    if (isBlacklisted(st)) continue;
     if (!isTimeActive(st.start, st.end, utcMinutes)) continue;
     if (!passesToday(st)) continue;
     const stronger = activeAll.find(o => o !== st && o.freq === st.freq && o.kw > st.kw);
@@ -1085,7 +1316,7 @@ function renderUpcoming(activeAll, utcMinutes, hideChina, env, dayNum) {
   }
   // b) ▶ Stanice, které právě teď nejdou, ale startují v příští hodině
   for (const st of SCHEDULE_DB) {
-    if (hideChina && st.isChina) continue;
+    if (isBlacklisted(st)) continue;
     if (isTimeActive(st.start, st.end, utcMinutes)) continue;
     if (!passesToday(st)) continue;
     const startsIn = ((toMinutes(st.start) - utcMinutes) + 1440) % 1440;
@@ -1133,10 +1364,18 @@ function drawRadar(results, balconyAz, activeAll) {
 
   const cx = S / 2, cy = S / 2, R = 118;
 
+  // Barvy z aktuálního motivu (CSS tokeny) – radar se přebarví při přepnutí skinu
+  const css = getComputedStyle(document.documentElement);
+  const v = (n, fb) => (css.getPropertyValue(n).trim() || fb);
+  const cRadarBg = v('--radar-bg', '#1a1713'), cGrid = v('--radar-grid', '#35302a');
+  const cAccent = v('--accent', '#ec9a73'), cAmber = v('--amber', '#e3b26a');
+  const cMuted = v('--muted', '#9b9184'), cText = v('--text', '#ece6dc');
+  const cGreen = v('--green', '#9fd398'), cCyan = v('--cyan', '#8ec7bd'), cBg = v('--bg', '#12100d');
+
   // Pozadí + jeden vnitřní kruh (orientace vzdálenosti: střed = blízko, okraj = daleko)
-  ctx.fillStyle = '#1a1713';
+  ctx.fillStyle = cRadarBg;
   ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#35302a';
+  ctx.strokeStyle = cGrid;
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, R / 2, 0, Math.PI * 2); ctx.stroke();
@@ -1144,8 +1383,7 @@ function drawRadar(results, balconyAz, activeAll) {
   // 12 výsečí (30°): počet aktivních vysílačů ve směru -> sytost výseče
   const SECTORS = 12, step = 360 / SECTORS;
   const counts = new Array(SECTORS).fill(0);
-  for (const st of activeAll) {
-    if (st.isChina && document.getElementById('hideChina').checked) continue;
+  for (const st of activeAll) { // activeAll už má blacklist odfiltrovaný
     counts[Math.floor((((st.__bearing ?? st.bearing) || 0) % 360) / step) % SECTORS]++;
   }
   const maxCount = Math.max(...counts, 1);
@@ -1156,11 +1394,13 @@ function drawRadar(results, balconyAz, activeAll) {
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, R, a1, a2);
     ctx.closePath();
-    ctx.fillStyle = `rgba(217, 168, 98, ${0.05 + 0.30 * counts[i] / maxCount})`;
+    ctx.globalAlpha = 0.05 + 0.30 * counts[i] / maxCount;
+    ctx.fillStyle = cAmber;
     ctx.fill();
+    ctx.globalAlpha = 1;
     // počet vysílačů uprostřed výseče (na vnějším okraji)
     const midA = toRad((i + 0.5) * step - 90);
-    ctx.fillStyle = '#d9a862';
+    ctx.fillStyle = cAmber;
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(String(counts[i]), cx + (R - 12) * Math.cos(midA), cy + (R - 12) * Math.sin(midA) + 4);
@@ -1168,10 +1408,10 @@ function drawRadar(results, balconyAz, activeAll) {
   }
 
   // Kříž + světové strany (sever nahoře)
-  ctx.strokeStyle = '#35302a';
+  ctx.strokeStyle = cGrid;
   ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
-  ctx.fillStyle = '#a09688';
+  ctx.fillStyle = cMuted;
   ctx.font = 'bold 12px monospace';
   ctx.fillText('S', cx - 4, cy - R - 4);
   ctx.fillText('J', cx - 4, cy + R + 14);
@@ -1184,13 +1424,16 @@ function drawRadar(results, balconyAz, activeAll) {
   const b1 = toRad(balconyAz - 45 - 90), b2 = toRad(balconyAz + 45 - 90);
   ctx.arc(cx, cy, R, b1, b2);
   ctx.closePath();
-  ctx.strokeStyle = 'rgba(226, 145, 106, 0.55)';
+  ctx.save();
+  ctx.globalAlpha = 0.6;
+  ctx.strokeStyle = cAccent;
   ctx.lineWidth = 2;
   ctx.stroke();
+  ctx.restore();
   ctx.lineWidth = 1;
 
   // QTH uprostřed
-  ctx.fillStyle = '#e3ddd3';
+  ctx.fillStyle = cText;
   ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
 
   // Tečky jen TOP cílů (max 12, koresponduje se seznamem) - bez čísel,
@@ -1202,9 +1445,9 @@ function drawRadar(results, balconyAz, activeAll) {
     const rad = R * Math.min(1, r.dist / maxDist);
     const x = cx + rad * Math.cos(ang);
     const y = cy + rad * Math.sin(ang);
-    const color = r.qrmFlag ? '#d9a862' : (r.score >= 75 ? '#96c98f' : '#86bcb2');
+    const color = r.qrmFlag ? cAmber : (r.isTop ? cGreen : cCyan);
     const dotR = 4 + r.score / 40; // 4–6.5 px
-    ctx.strokeStyle = 'rgba(20, 17, 14, 0.8)';
+    ctx.strokeStyle = cBg;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, y, dotR, 0, Math.PI * 2); ctx.stroke(); ctx.fill();
     ctx.fillStyle = color;
@@ -1255,7 +1498,7 @@ function copyMarkdownLog(cid) {
   const dateStr = now.toISOString().slice(0, 10);
   const utcStr = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')} UTC`;
   const alt = document.getElementById('altitude').value;
-  const rx = document.getElementById('rxProfile').options[document.getElementById('rxProfile').selectedIndex].text;
+  const rx = rigLabel();
 
   const md = `- **${r.freq} kHz** | **${r.station}** (${r.site}) | ${dateStr} ${utcStr} | ${r.dist} km (${r.bearing}°) | QTH: ${alt}m | RX: ${rx} | SINPO: `;
   navigator.clipboard.writeText(md).then(() => {
@@ -1305,7 +1548,7 @@ function saveLogEntry(cid) {
     dist: st.dist, bearing: st.bearing, sinpo, note,
     qth: document.getElementById('qthCoords').value,
     alt: document.getElementById('altitude').value,
-    rx: document.getElementById('rxProfile').selectedOptions[0].text
+    rx: rigLabel()
   });
   setLog(log);
   updateLogBadge();
@@ -1490,7 +1733,7 @@ document.getElementById('azimuth').addEventListener('input', e => {
   evaluateStations();
 });
 
-['qthCoords', 'altitude', 'rxProfile', 'hideChina'].forEach(id => {
+['qthCoords', 'altitude', 'rxSelect', 'antSelect'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
     saveQth();          // ruční zadání QTH → uložit lokálně (per zařízení)
     evaluateStations();
@@ -1994,6 +2237,115 @@ document.getElementById('btnSync').addEventListener('click', async () => {
   }
 });
 
+// 9b. LADĚNÍ SKÓRE (váhy sliderů + min. skóre) a BLACKLIST — lokální persistence
+const TUNE_KEY = 'dxr_tuning_v1';
+function loadWeights() {
+  try {
+    const t = JSON.parse(localStorage.getItem(TUNE_KEY));
+    if (t) {
+      for (const k of ['balcony', 'power', 'skip', 'prop']) if (t[k] != null) WEIGHTS[k] = t[k];
+      if (t.minScore != null) document.getElementById('minScore').value = t.minScore;
+    }
+  } catch (e) { /* výchozí váhy */ }
+}
+function saveWeights() {
+  try {
+    localStorage.setItem(TUNE_KEY, JSON.stringify({
+      ...WEIGHTS, minScore: document.getElementById('minScore').value
+    }));
+  } catch (e) { /* privátní režim */ }
+}
+function syncWeightLabels() {
+  document.getElementById('wBalconyVal').textContent = WEIGHTS.balcony.toFixed(1) + '×';
+  document.getElementById('wPowerVal').textContent = WEIGHTS.power.toFixed(1) + '×';
+  document.getElementById('wSkipVal').textContent = WEIGHTS.skip.toFixed(1) + '×';
+  document.getElementById('wPropVal').textContent = WEIGHTS.prop.toFixed(1) + '×';
+  document.getElementById('minScoreVal').textContent = document.getElementById('minScore').value;
+}
+function initTuningUI() {
+  document.getElementById('wBalcony').value = WEIGHTS.balcony;
+  document.getElementById('wPower').value = WEIGHTS.power;
+  document.getElementById('wSkip').value = WEIGHTS.skip;
+  document.getElementById('wProp').value = WEIGHTS.prop;
+  syncWeightLabels();
+  // blacklist UI
+  document.getElementById('blText').value = BLACKLIST.join('\n');
+  document.getElementById('blOn').checked = BLACKLIST_ON;
+  updateBlStatus();
+}
+function updateBlStatus() {
+  const el = document.getElementById('blStatus');
+  if (el) el.textContent = BLACKLIST_ON ? `(zap, ${BLACKLIST.length} vzorů)` : '(vyp)';
+}
+// slidery vah
+[['wBalcony', 'balcony'], ['wPower', 'power'], ['wSkip', 'skip'], ['wProp', 'prop']].forEach(([id, key]) => {
+  document.getElementById(id).addEventListener('input', e => {
+    WEIGHTS[key] = parseFloat(e.target.value);
+    syncWeightLabels(); saveWeights(); evaluateStations();
+  });
+});
+document.getElementById('minScore').addEventListener('input', () => {
+  syncWeightLabels(); saveWeights(); evaluateStations();
+});
+document.getElementById('btnWeightsReset').addEventListener('click', () => {
+  WEIGHTS.balcony = 1.0; WEIGHTS.power = 0.6; WEIGHTS.skip = 1.0; WEIGHTS.prop = 1.0;
+  document.getElementById('minScore').value = 30;
+  initTuningUI(); saveWeights(); evaluateStations();
+});
+document.getElementById('btnWeightsCopy').addEventListener('click', () => {
+  const json = JSON.stringify({ ...WEIGHTS, minScore: parseInt(document.getElementById('minScore').value, 10) }, null, 2);
+  navigator.clipboard.writeText(json).then(() => {
+    const t = document.getElementById('toast');
+    t.textContent = 'Váhy zkopírovány (JSON) — pošli je Claudovi na zapečení výchozích hodnot.';
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; t.textContent = 'Zkopírováno do schránky (Markdown)!'; }, 3000);
+  }).catch(() => window.prompt('Zkopíruj váhy ručně:', json));
+});
+// blacklist
+document.getElementById('blText').addEventListener('change', e => {
+  BLACKLIST = e.target.value.split(/\r?\n/).map(s => s.toLowerCase().trim()).filter(Boolean);
+  saveBlacklist(); updateBlStatus(); evaluateStations();
+});
+document.getElementById('blOn').addEventListener('change', e => {
+  BLACKLIST_ON = e.target.checked;
+  saveBlacklist(); updateBlStatus(); evaluateStations();
+});
+document.getElementById('btnBlReset').addEventListener('click', () => {
+  BLACKLIST = BLACKLIST_DEFAULT.map(s => s.toLowerCase());
+  BLACKLIST_ON = true;
+  document.getElementById('blText').value = BLACKLIST.join('\n');
+  document.getElementById('blOn').checked = true;
+  saveBlacklist(); updateBlStatus(); evaluateStations();
+});
+
+// 9c. BAREVNÝ MOTIV (Vibe / Night / Light) — cyklus tlačítkem, lokální persistence
+const THEME_KEY = 'dxr_theme_v1';
+const THEMES = [
+  { id: 'vibe',  name: 'Vibe' },   // výchozí: svěží oranžová na chladné tmavé
+  { id: 'night', name: 'Night' },  // původní retro jantar/rez
+  { id: 'light', name: 'Light' }   // světlý
+];
+function applyTheme(id) {
+  const t = THEMES.find(x => x.id === id) || THEMES[0];
+  if (t.id === 'vibe') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t.id);
+  const lbl = document.getElementById('themeName');
+  if (lbl) lbl.textContent = t.name;
+  try { localStorage.setItem(THEME_KEY, t.id); } catch (e) { /* privátní režim */ }
+}
+function loadTheme() {
+  let id = 'vibe';
+  try { id = localStorage.getItem(THEME_KEY) || 'vibe'; } catch (e) { /* default */ }
+  applyTheme(id);
+}
+document.getElementById('btnTheme').addEventListener('click', () => {
+  let cur = 'vibe';
+  try { cur = localStorage.getItem(THEME_KEY) || 'vibe'; } catch (e) {}
+  const idx = THEMES.findIndex(x => x.id === cur);
+  applyTheme(THEMES[(idx + 1) % THEMES.length].id);
+  if (typeof lastResults !== 'undefined') evaluateStations(); // překreslí radar v nových barvách
+});
+
 // 10. START
 // Při servování přes http(s) (GitHub Pages, localhost) se automaticky dotáhne
 // kompletní databáze EiBi - nejprve z lokálního uložiště (naposledy synchronizovaná),
@@ -2023,7 +2375,11 @@ async function autoLoadSchedule() {
   }
 }
 
+loadTheme();                   // barevný motiv (Vibe/Night/Light) — hned, ať nebliká
+loadBlacklist();               // skryté stanice (název/země) — lokální seznam
+loadWeights();                 // váhy sliderů + min. skóre (lokální)
 loadQth();                     // obnoví naposledy zadané QTH (jen z tohoto zařízení)
+initTuningUI();                // dosadí hodnoty do sliderů a blacklist textarea
 updateTelemetryBar();          // offline odhad hned, poté se dosadí live NOAA data
 updateLogBadge();               // počet zapsaných úlovků v deníku
 fetchSpaceWeather();            // async - po stažení přepočítá skóre
