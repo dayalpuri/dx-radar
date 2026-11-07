@@ -616,8 +616,8 @@
           <input type="range" id="wProp" min="0" max="2" step="0.1" value="1.5">
         </div>
         <div class="slider-row">
-          <label><span data-i18n="w_minscore">Min. skóre (skrýt pod)</span> <span class="wval" id="minScoreVal">55</span></label>
-          <input type="range" id="minScore" min="0" max="90" step="5" value="55">
+          <label><span data-i18n="w_minscore">Min. skóre (skrýt pod)</span> <span class="wval" id="minScoreVal">50</span></label>
+          <input type="range" id="minScore" min="0" max="90" step="5" value="50">
         </div>
         <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button type="button" class="action-btn" id="btnWeightsReset" data-i18n="w_reset">↺ Výchozí váhy</button>
@@ -763,8 +763,8 @@ const I18N = {
     radar_leg2: '<span class="dot-g">●</span> top cíle (bez čísel, detail klepnutím) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> ostatní',
     band_label: "Filtr pásem", all: "Vše", sort_label: "Řazení stanic",
     sort_freq: "Kmitočet ▲", sort_score: "Skóre ▼",
-    chance_label: "Skóre úlovku (tercily)", chance_note: "— heuristika 5–99, ne %",
-    chance_top: "Nejlepší ⅓", chance_mid: "Střední ⅓", chance_low: "Spodní ⅓",
+    chance_label: "Skóre úlovku (pevné hranice)", chance_note: "— heuristika 5–99, ne %",
+    chance_top: "Silné (≥68)", chance_mid: "Slyšitelné (50–67)", chance_low: "Slabé (<50)",
     tw_sfi: "Sluneční tok:", tw_kp: "Geomagnetika:", tw_muf: "MUF odhad:", tw_cond: "Stav:",
     tw_loading: "Načítám NOAA…",
     tab_targets: "🎯 Cíle teď", tab_windows: "⏱ Časová okna",
@@ -836,8 +836,8 @@ const I18N = {
     radar_leg2: '<span class="dot-g">●</span> top targets (no number, tap for detail) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> others',
     band_label: "Band filter", all: "All", sort_label: "Sort stations",
     sort_freq: "Frequency ▲", sort_score: "Score ▼",
-    chance_label: "Catch score (terciles)", chance_note: "— heuristic 5–99, not %",
-    chance_top: "Top ⅓", chance_mid: "Middle ⅓", chance_low: "Bottom ⅓",
+    chance_label: "Catch score (fixed bands)", chance_note: "— heuristic 5–99, not %",
+    chance_top: "Strong (≥68)", chance_mid: "Audible (50–67)", chance_low: "Weak (<50)",
     tw_sfi: "Solar flux:", tw_kp: "Geomagnetic:", tw_muf: "MUF est.:", tw_cond: "State:",
     tw_loading: "Loading NOAA…",
     tab_targets: "🎯 Targets now", tab_windows: "⏱ Time windows",
@@ -1010,10 +1010,9 @@ function safeUrl(u) {
 
 // Barevná třída skóre dle tercilů dané chvíle (zelená = top ⅓, amber = střední, tlumená = spodní).
 // Tercily se počítají z živého rozdělení, takže barvy sedí i po změně vah/antény/přijímače.
-function scoreClass(s, sTop, sMid) {
-  if (sTop == null) return s >= 70 ? 'sc-hi' : s >= 45 ? 'sc-mid' : 'sc-lo';
-  return s >= sTop ? 'sc-hi' : s >= sMid ? 'sc-mid' : 'sc-lo';
-}
+// Pevné hranice skóre z balkonové kalibrace (poledne+večer): silné / slyšitelné / slabé.
+const SCORE_HI = 68, SCORE_MID = 50;
+function scoreClass(s) { return s >= SCORE_HI ? 'sc-hi' : s >= SCORE_MID ? 'sc-mid' : 'sc-lo'; }
 
 // Krátký rozklad skóre do karty – jen nenulové složky, se znaménkem.
 const PART_KEYS = { balcony: 'p_balcony', beam: 'p_beam', ant: 'p_ant', rx: 'p_rx',
@@ -1392,26 +1391,15 @@ function evaluateStations() {
     });
   }
 
-  // Pod zvolené minimální skóre nemá cenu ukazovat (posuvník, výchozí 30)
+  // Pod zvolené minimální skóre nemá cenu ukazovat (posuvník, výchozí 50)
   const viable = results.filter(r => r.score >= minScore);
 
-  // Tercily šance: rozdělení na třetiny podle pořadí ve skóre
-  // (remízy nerozbíjejí hranice - vždy tři neprázdné skupiny)
-  const byScore = [...viable].sort((a, b) => b.score - a.score);
-  const n3 = Math.ceil(byScore.length / 3);
-  const topKeys = new Set(byScore.slice(0, n3).map(stationKey));
-  const midKeys = new Set(byScore.slice(n3, 2 * n3).map(stationKey));
-  const sTop = n3 > 0 ? byScore[n3 - 1].score : 0;                    // nejslabší v top tercilu
-  const sMid = 2 * n3 <= byScore.length ? byScore[2 * n3 - 1].score : 0; // nejslabší ve středním
-  document.getElementById('chanceTop').textContent = tr('ch_top_n', { s: sTop });
-  document.getElementById('chanceMid').textContent = tr('ch_mid_n', { a: sMid, b: sTop });
-  document.getElementById('chanceLow').textContent = tr('ch_low_n', { s: sMid });
-
-  // Filtr šance (tercily) + pásem (band pills)
+  // Skupiny podle PEVNÝCH hranic skóre (kalibrováno z balkonového ground-truth):
+  // Silné ≥ SCORE_HI, Slyšitelné SCORE_MID–HI, Slabé < SCORE_MID.
   const byChance = activeChance === "all" ? viable : viable.filter(r =>
-    activeChance === "top" ? topKeys.has(stationKey(r)) :
-    activeChance === "mid" ? midKeys.has(stationKey(r)) :
-    !topKeys.has(stationKey(r)) && !midKeys.has(stationKey(r)));
+    activeChance === "top" ? r.score >= SCORE_HI :
+    activeChance === "mid" ? (r.score >= SCORE_MID && r.score < SCORE_HI) :
+    r.score < SCORE_MID);
   const filtered = activeBand === "all" ? byChance : byChance.filter(r => bandKey(r.freq) === activeBand);
 
   // Řazení: kmitočet (výchozí) nebo šance na úlovek
@@ -1429,13 +1417,13 @@ function evaluateStations() {
   const listEl = document.getElementById('stationList');
   listEl.innerHTML = filtered.map(r => {
     const cid = `${r.freq}-${r.station.replace(/[^a-zA-Z0-9]/g, '')}`;
-    const isTop = topKeys.has(stationKey(r));
+    const isTop = r.score >= SCORE_HI;
     return `
     <div class="station-card ${isTop ? 'top-pick' : ''} ${r.qrmFlag ? 'qrm-warn' : ''}" id="card-${cid}">
       <div class="st-header">
         <span class="freq">${r.freq} kHz</span>
         ${r.minsLeft <= 60 ? `<span class="ends-soon">${tr('card_ends', { n: r.minsLeft })}</span>` : ''}
-        <span class="score-badge">${tr('lbl_score')}: <strong class="${scoreClass(r.score, sTop, sMid)}">${r.score}</strong> | ${tr('lbl_azimut')}: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
+        <span class="score-badge">${tr('lbl_score')}: <strong class="${scoreClass(r.score)}">${r.score}</strong> | ${tr('lbl_azimut')}: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
       </div>
       <div class="st-title">${escapeHtml(r.station)} (${escapeHtml(r.country)}) — ${escapeHtml(r.lang)}</div>
       <div class="st-meta">
@@ -1467,9 +1455,9 @@ function evaluateStations() {
     </div>
   `;}).join('');
 
-  renderUpcoming(activeAll, utcMinutes, env, dayNum, topKeys);
+  renderUpcoming(activeAll, utcMinutes, env, dayNum);
   // radar: sektorové počty ze všech aktivních (blacklist už odfiltrován), tečky top cílů
-  filtered.forEach(r => { r.isTop = topKeys.has(stationKey(r)); });
+  filtered.forEach(r => { r.isTop = r.score >= SCORE_HI; });
   const activeWithBearing = activeAll.map(st => ({
     ...st, __bearing: calcGeodesic(myLat, myLon, st.lat, st.lon).bearing
   }));
@@ -1480,7 +1468,7 @@ function evaluateStations() {
 // ▶ stanice, které startují; 🔓 kanály, kde silný rušitel brzy vypne.
 // ŠANCE se počítá proti budoucímu stavu éteru (▶ po startu, 🔓 po vypnutí
 // rušitele), takže okna jdou řadit i podle pravděpodobnosti úlovku.
-function renderUpcoming(activeAll, utcMinutes, env, dayNum, topKeys) {
+function renderUpcoming(activeAll, utcMinutes, env, dayNum) {
   const soon = m => m <= 60;
   const items = [];
   const seen = new Set();
@@ -2525,7 +2513,7 @@ document.getElementById('minScore').addEventListener('input', () => {
 });
 document.getElementById('btnWeightsReset').addEventListener('click', () => {
   WEIGHTS.balcony = 1.0; WEIGHTS.power = 1.2; WEIGHTS.skip = 1.0; WEIGHTS.prop = 1.5;
-  document.getElementById('minScore').value = 55;
+  document.getElementById("minScore").value = 50;
   initTuningUI(); saveWeights(); evaluateStations();
 });
 document.getElementById('btnWeightsCopy').addEventListener('click', () => {
