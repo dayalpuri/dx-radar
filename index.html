@@ -1485,11 +1485,15 @@ function renderUpcoming(activeAll, utcMinutes, env, dayNum, topKeys) {
   const items = [];
   const seen = new Set();
   const passesToday = st => !st.days || st.days.includes(String(dayNum));
+  // Časová okna respektují stejné filtry jako hlavní seznam: pásmo + min. skóre
+  const minScore = parseInt(document.getElementById('minScore').value, 10) || 0;
   const push = (st, t, typ, info, activeNow) => {
+    if (activeBand !== 'all' && bandKey(st.freq) !== activeBand) return; // filtr pásem
     const key = stationKey(st);
     if (seen.has(key)) return; // deduplikace napříč zdroji
-    seen.add(key);
     const sc = scoreStation(st, env, activeNow);
+    if (sc.score < minScore) return; // min. skóre (budoucí stav éteru)
+    seen.add(key);
     items.push({ t, typ, freq: st.freq, station: st.station, kw: st.kw || 0, score: sc.score, info });
   };
 
