@@ -604,20 +604,20 @@
           <input type="range" id="wBalcony" min="0" max="2" step="0.1" value="1">
         </div>
         <div class="slider-row">
-          <label><span data-i18n="w_power">Výkon vysílače</span> <span class="wval" id="wPowerVal">0.6×</span></label>
-          <input type="range" id="wPower" min="0" max="2" step="0.1" value="0.6">
+          <label><span data-i18n="w_power">Výkon vysílače</span> <span class="wval" id="wPowerVal">1.2×</span></label>
+          <input type="range" id="wPower" min="0" max="2" step="0.1" value="1.2">
         </div>
         <div class="slider-row">
           <label><span data-i18n="w_skip">Vzdálenost / skip</span> <span class="wval" id="wSkipVal">1.0×</span></label>
           <input type="range" id="wSkip" min="0" max="2" step="0.1" value="1">
         </div>
         <div class="slider-row">
-          <label><span data-i18n="w_prop">Propagace (MUF, D-vrstva)</span> <span class="wval" id="wPropVal">1.0×</span></label>
-          <input type="range" id="wProp" min="0" max="2" step="0.1" value="1">
+          <label><span data-i18n="w_prop">Propagace (MUF, D-vrstva)</span> <span class="wval" id="wPropVal">1.5×</span></label>
+          <input type="range" id="wProp" min="0" max="2" step="0.1" value="1.5">
         </div>
         <div class="slider-row">
-          <label><span data-i18n="w_minscore">Min. skóre (skrýt pod)</span> <span class="wval" id="minScoreVal">30</span></label>
-          <input type="range" id="minScore" min="0" max="90" step="5" value="30">
+          <label><span data-i18n="w_minscore">Min. skóre (skrýt pod)</span> <span class="wval" id="minScoreVal">55</span></label>
+          <input type="range" id="minScore" min="0" max="90" step="5" value="55">
         </div>
         <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button type="button" class="action-btn" id="btnWeightsReset" data-i18n="w_reset">↺ Výchozí váhy</button>
@@ -1248,7 +1248,7 @@ function skipTerm(freq, dist) {
 // Citlivost přijímače (plochý posun; Airspy navíc zprovozní pasivní YouLoop)
 const RX_BONUS = { pl330: 0, airspy: 12, ats4732: -6 };
 // Výchozí váhy sliderů (0–2×); přepisuje je uživatel a ukládají se lokálně
-const WEIGHTS = { balcony: 1.0, power: 0.6, skip: 1.0, prop: 1.0 };
+const WEIGHTS = { balcony: 1.0, power: 1.2, skip: 1.0, prop: 1.5 };
 const SCORE_BASE = 50;
 
 function scoreStation(st, env, activeNow) {
@@ -2520,8 +2520,8 @@ document.getElementById('minScore').addEventListener('input', () => {
   syncWeightLabels(); saveWeights(); evaluateStations();
 });
 document.getElementById('btnWeightsReset').addEventListener('click', () => {
-  WEIGHTS.balcony = 1.0; WEIGHTS.power = 0.6; WEIGHTS.skip = 1.0; WEIGHTS.prop = 1.0;
-  document.getElementById('minScore').value = 30;
+  WEIGHTS.balcony = 1.0; WEIGHTS.power = 1.2; WEIGHTS.skip = 1.0; WEIGHTS.prop = 1.5;
+  document.getElementById('minScore').value = 55;
   initTuningUI(); saveWeights(); evaluateStations();
 });
 document.getElementById('btnWeightsCopy').addEventListener('click', () => {
