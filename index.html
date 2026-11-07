@@ -568,7 +568,10 @@
     </div>
     <div class="control-group">
       <label data-i18n="alt_label">Nadm. výška (m)</label>
-      <input type="number" id="altitude" value="" step="10" placeholder="300">
+      <div class="qth-row">
+        <input type="number" id="altitude" value="" step="10" placeholder="300">
+        <button type="button" class="btn-sm" id="btnElev" data-i18n-title="alt_terrain_title" title="Dopočítat výšku terénu z QTH souřadnic">⛰</button>
+      </div>
     </div>
     <div class="control-group">
       <label data-i18n="rx_label">Přijímač</label>
@@ -893,7 +896,10 @@ Object.assign(I18N.cs, {
   stream_play_fail: "Stream se nepodařilo přehrát (kodek/blokace). Zkus jiný odkaz nebo web stanice.",
   clip_blocked_file: "Schránka je blokovaná (file://). Zkopíruj ručně:",
   note_ph: "Poznámka (volitelné)", storage_full: "Data se nevešla do lokálního úložiště ({err}).",
-  sync_btn_reset: "⬇️ Stáhnout rozvrh"
+  sync_btn_reset: "⬇️ Stáhnout rozvrh",
+  alt_terrain_title: "Dopočítat výšku terénu z QTH souřadnic",
+  alt_need_qth: "Nejdřív zadej QTH (souřadnice).", alt_fetching: "⏳ Zjišťuji výšku terénu…",
+  alt_got: "Výška terénu: {m} m (bez patra — přičti ~3 m/patro)", alt_fail: "Výšku terénu se nepodařilo zjistit."
 });
 Object.assign(I18N.en, {
   sync_btn_wait: "⏳ Downloading…",
@@ -903,7 +909,10 @@ Object.assign(I18N.en, {
   stream_play_fail: "Could not play stream (codec/blocked). Try another link or the station's site.",
   clip_blocked_file: "Clipboard blocked (file://). Copy manually:",
   note_ph: "Note (optional)", storage_full: "Data did not fit local storage ({err}).",
-  sync_btn_reset: "⬇️ Download schedule"
+  sync_btn_reset: "⬇️ Download schedule",
+  alt_terrain_title: "Look up terrain altitude from QTH coordinates",
+  alt_need_qth: "Enter QTH (coordinates) first.", alt_fetching: "⏳ Looking up terrain altitude…",
+  alt_got: "Terrain altitude: {m} m (no floor — add ~3 m/floor)", alt_fail: "Could not get terrain altitude."
 });
 const LANG_KEY = 'dxr_lang_v1';
 let LANG = 'cs';
@@ -1938,6 +1947,41 @@ function qthFromIp(reason) {
   }).catch(() => alert(tr("ip_fail")));
 }
 
+// Výška terénu z lat/lon (open-elevation / opentopodata — oba s CORS).
+// GPS vertikální přesnost je mizerná a často null, proto terén dopočítáme z mapy.
+// Vrací metry nad mořem (bez patra — to si uživatel přičte ~3 m/patro).
+async function fetchElevation(lat, lon) {
+  const providers = [
+    `https://api.opentopodata.org/v1/aster30m?locations=${lat},${lon}`,
+    `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`
+  ];
+  for (const url of providers) {
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const el = j && j.results && j.results[0] && j.results[0].elevation;
+      if (el != null && isFinite(el)) return Math.round(el);
+    } catch (e) { /* další provider */ }
+  }
+  return null;
+}
+
+// Dopočet výšky terénu pro zadané QTH (tlačítko ⛰ i auto po GPS bez senzoru výšky)
+async function fillElevationFromQth(silent) {
+  const [lat, lon] = document.getElementById('qthCoords').value.split(',').map(s => parseFloat(s.trim()));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) { if (!silent) alert(tr('alt_need_qth')); return; }
+  const info = document.getElementById('radarInfo');
+  if (info && !silent) info.textContent = tr('alt_fetching');
+  const m = await fetchElevation(lat, lon);
+  if (m == null) { if (!silent) { if (info) info.textContent = tr('alt_fail'); } return; }
+  document.getElementById('altitude').value = m;
+  saveQth();
+  evaluateStations();
+  if (info) info.textContent = tr('alt_got', { m });
+}
+document.getElementById('btnElev').addEventListener('click', () => fillElevationFromQth(false));
+
 // GPS: na https (Pages/localhost) přesná poloha; u file:// je geolocation blokován → IP fallback
 document.getElementById('btnGps').addEventListener('click', () => {
   if (window.location.protocol === 'file:' || !navigator.geolocation) {
@@ -1948,11 +1992,16 @@ document.getElementById('btnGps').addEventListener('click', () => {
     const lat = pos.coords.latitude.toFixed(4);
     const lon = pos.coords.longitude.toFixed(4);
     document.getElementById('qthCoords').value = `${lat}, ${lon}`;
-    if (pos.coords.altitude) {
+    if (pos.coords.altitude != null && isFinite(pos.coords.altitude)) {
       document.getElementById('altitude').value = Math.round(pos.coords.altitude);
+      saveQth();
+      evaluateStations();
+    } else {
+      // senzor výšku nedal → dopočítej terén z mapy (tiše)
+      saveQth();
+      evaluateStations();
+      fillElevationFromQth(true);
     }
-    saveQth();
-    evaluateStations();
   }, err => {
     qthFromIp(tr("gps_denied") + " (" + err.message + ")");
   }, { enableHighAccuracy: true, timeout: 8000 });
