@@ -1,0 +1,43 @@
+name: Sync rozvrhů (HFCC + AOKI + EiBi)
+
+# Automaticky stáhne čerstvé vysílací rozvrhy (včetně AOKI, kterou appka sama
+# stáhnout neumí — je jen v ZIPu) a commitne eibi.json, když se něco změnilo.
+# Tím je v repu (a po network-first SW i v nainstalované PWA) max ~den stará verze.
+
+on:
+  schedule:
+    - cron: '30 4 * * *'   # denně 04:30 UTC (commit jen při reálné změně)
+  workflow_dispatch: {}      # + ruční spuštění tlačítkem v záložce Actions
+
+permissions:
+  contents: write            # workflow smí commitnout zpět do repa
+
+concurrency:
+  group: sync-schedules
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Stáhnout a sloučit rozvrhy
+        run: python3 eibi_sync.py --sync
+
+      - name: Commitnout, když se eibi.json změnil
+        run: |
+          if [ -n "$(git status --porcelain eibi.json eibi.meta.json)" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add eibi.json eibi.meta.json
+            git commit -m "Auto-sync rozvrhů (HFCC+AOKI+EiBi) $(date -u +%F)"
+            git push
+            echo "Commitnuto — rozvrh aktualizován."
+          else
+            echo "Beze změny — necommituji."
+          fi
