@@ -1,5 +1,5 @@
 // Service Worker DX Radar Pro - po první návštěvě funguje i offline (letadlový režim na balkoně)
-const CACHE = 'dx-radar-v23';
+const CACHE = 'dx-radar-v24';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './eibi.json'];
 
 self.addEventListener('install', event => {
@@ -24,6 +24,18 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return; // NOAA API necháme online
   // NOAA telemetrii vždy ber čerstvou z webu (network-first), zbytek z cache
   if (url.hostname.startsWith('services.swpc.noaa.gov')) return;
+  // Rozvrh (eibi.json/meta) = network-first: aby se k nainstalované PWA dostal
+  // čerstvý auto-sync z GitHubu (cron). Offline fallback = poslední z cache.
+  if (/\/eibi\.(json|meta\.json)$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(event.request).then(resp => {
+        const copy = resp.clone();
+        caches.open(CACHE).then(c => c.put(event.request, copy)).catch(() => {});
+        return resp;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))
   );

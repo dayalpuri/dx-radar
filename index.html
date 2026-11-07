@@ -9,9 +9,9 @@
   <title>DX Radar Pro // Kontextový SWL Engine</title>
   <style>
     /* ── MOTIVY ──────────────────────────────────────────────────────────────
-       Výchozí = „Vibe" (svěží, živá oranžová/korálová na chladné tmavé).
-       data-theme="night" = původní retro (jantar/rez). data-theme="light" = světlý.
-       Barvy jsou tokeny; radar i chipy je čtou, takže přepnutí obarví vše.      */
+       Výchozí = „Dark" (svěží oranžová/korálová na chladné tmavé).
+       data-theme="light" = světlý. Barvy jsou tokeny; radar, karty, inputy,
+       tlačítka i chipy je čtou, takže přepnutí obarví úplně vše.               */
     :root {
       --bg: #13151a;
       --panel: #1a1d24;
@@ -20,34 +20,23 @@
       --border-hi: #3d4350;
       --text: #f1ede5;
       --muted: #99a0ad;
-      --accent: #ff7a3d;   /* mistral vibe orange */
+      --accent: #ff7a3d;   /* mistral orange */
       --amber: #ffb24d;
       --green: #6fd38a;
       --cyan: #5fd0c6;
       --glow: radial-gradient(1200px 600px at 100% -10%, rgba(255,122,61,.12) 0%, rgba(255,122,61,0) 60%);
       --radar-bg: #171a20;
       --radar-grid: #2d323d;
-      --badge-bg: #26211b;
+      --badge-bg: #262b35;
+      --raised: #262b35;    /* tlačítka, aktivní pills/taby */
+      --inset: #15181e;     /* vnořené plochy: inputy-info, rady, tabulka, chipy */
+      --hot-bg: #3a2420;    /* „končí za / QRM" badge */
+      --hot-fg: #ffb0a0;
+      --ok-bg: #1a241a;     /* top-pick karta */
+      --ok-border: #33502e;
       --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Roboto Mono', ui-monospace, monospace;
       --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       --shadow: 0 1px 3px rgba(0,0,0,.35), 0 4px 16px rgba(0,0,0,.22);
-    }
-    :root[data-theme="night"] {
-      --bg: #12100d;
-      --panel: #1b1815;
-      --card: #211d19;
-      --border: #332e28;
-      --border-hi: #4a443c;
-      --text: #ece6dc;
-      --muted: #9b9184;
-      --accent: #ec9a73;
-      --amber: #e3b26a;
-      --green: #9fd398;
-      --cyan: #8ec7bd;
-      --glow: radial-gradient(1200px 600px at 100% -10%, #1c1813 0%, rgba(28,24,19,0) 60%);
-      --radar-bg: #1a1713;
-      --radar-grid: #35302a;
-      --badge-bg: #2a241e;
     }
     :root[data-theme="light"] {
       --bg: #f7f3ec;
@@ -64,7 +53,13 @@
       --glow: radial-gradient(1200px 600px at 100% -10%, rgba(228,87,46,.08) 0%, rgba(228,87,46,0) 60%);
       --radar-bg: #fbf7f0;
       --radar-grid: #e0d6c5;
-      --badge-bg: #f0e7d8;
+      --badge-bg: #efe6d6;
+      --raised: #efe6d6;
+      --inset: #f1ebe0;
+      --hot-bg: #fde8e0;
+      --hot-fg: #b23c1e;
+      --ok-bg: #e8f3e8;
+      --ok-border: #bfe0bd;
       --shadow: 0 1px 3px rgba(80,60,40,.12), 0 4px 16px rgba(80,60,40,.10);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -118,7 +113,7 @@
       font-size: 13px;
       cursor: pointer;
     }
-    .btn-sm:hover, .btn-sm.active { border-color: var(--accent); color: var(--amber); background: #26211c; }
+    .btn-sm:hover, .btn-sm.active { border-color: var(--accent); color: var(--amber); background: var(--raised); }
 
     /* Hlavní mřížka: Radar vlevo, Ovládání vpravo (na mobilu pod sebou) */
     .dashboard {
@@ -201,7 +196,7 @@
     }
     input[type="range"] { padding: 0; accent-color: var(--accent); }
     button.action-btn {
-      background: #26211c;
+      background: var(--raised);
       color: var(--accent);
       border-color: var(--border-hi);
       cursor: pointer;
@@ -226,7 +221,7 @@
       color: var(--muted);
     }
     .band-pill.active {
-      background: #26211c;
+      background: var(--raised);
       color: var(--amber);
       border-color: var(--amber);
       font-weight: bold;
@@ -250,8 +245,8 @@
 
     /* Sekce nadcházejících přechodů (Časová okna) */
     .upcoming-box {
-      background: #201a12;
-      border: 1px solid #453a26;
+      background: var(--inset);
+      border: 1px solid var(--border);
       border-left: 3px solid var(--amber);
       border-radius: 5px;
       padding: 10px 12px;
@@ -272,9 +267,9 @@
     .windows-table th {
       text-align: left; color: var(--amber); font-size: 13px;
       text-transform: uppercase; letter-spacing: 1px;
-      padding: 4px 6px; border-bottom: 1px solid #453a26;
+      padding: 4px 6px; border-bottom: 1px solid var(--border);
     }
-    .windows-table td { padding: 6px; border-bottom: 1px solid #2a2520; vertical-align: top; }
+    .windows-table td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
     .windows-table .w-when { white-space: nowrap; color: var(--text); }
     .windows-table .w-freq { color: var(--amber); font-weight: bold; white-space: nowrap; }
     .windows-table .w-kw { text-align: right; white-space: nowrap; }
@@ -295,7 +290,7 @@
       cursor: pointer;
     }
     .main-tab.active {
-      background: #26211c;
+      background: var(--raised);
       color: var(--amber);
       border-color: var(--amber);
       border-bottom: 2px solid var(--amber);
@@ -332,21 +327,21 @@
     .ends-soon {
       font-size: 14px;
       font-weight: bold;
-      color: #ffb0a0;
+      color: var(--hot-fg);
       padding: 3px 7px;
       border-radius: 3px;
-      background: #3a201a;
-      border: 1px solid #7a4030;
+      background: var(--hot-bg);
+      border: 1px solid var(--hot-fg);
     }
     .st-header span, .score-badge { min-width: 0; overflow-wrap: anywhere; }
     .score-badge {
       font-size: 14px;
       padding: 3px 7px;
       border-radius: 3px;
-      background: #2a2520;
+      background: var(--inset);
       border: 1px solid var(--border);
     }
-    .st-title { font-size: 17px; font-weight: bold; color: #f2eee8; margin-bottom: 4px; }
+    .st-title { font-size: 17px; font-weight: bold; color: var(--text); margin-bottom: 4px; }
     .st-meta { font-size: 14px; color: var(--muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 10px; }
     .st-meta span { color: var(--text); }
 
@@ -355,13 +350,13 @@
     .score-parts span {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 11px; color: var(--muted);
-      background: #1b1813; border: 1px solid var(--border);
+      background: var(--inset); border: 1px solid var(--border);
       padding: 1px 6px; border-radius: 999px; white-space: nowrap;
     }
 
     /* Ladicí panel (details) – slidery vah + blacklist */
     details.tuning {
-      grid-column: 1 / -1; background: #17140f;
+      grid-column: 1 / -1; background: var(--inset);
       border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
     }
     details.tuning > summary {
@@ -377,13 +372,13 @@
     .slider-row .wval { color: var(--amber); font-family: ui-monospace, Menlo, monospace; }
     #blText {
       width: 100%; box-sizing: border-box; resize: vertical; min-height: 90px;
-      background: #0f0d0a; color: var(--text); border: 1px solid var(--border);
+      background: var(--inset); color: var(--text); border: 1px solid var(--border);
       border-radius: 4px; padding: 7px 8px; font-family: ui-monospace, Menlo, monospace; font-size: 13px;
     }
     #blStatus { font-weight: 400; }
 
     .pl330-advice {
-      background: #1a1712;
+      background: var(--inset);
       border: 1px dashed var(--border);
       padding: 7px 9px;
       border-radius: 4px;
@@ -399,9 +394,9 @@
       font-size: 12px;
       padding: 4px 7px;
       white-space: nowrap;
-      background: #1f2a1c;
+      background: var(--ok-bg);
       color: var(--green);
-      border-color: #33502e;
+      border-color: var(--ok-border);
       cursor: pointer;
     }
     .toast {
@@ -413,7 +408,7 @@
 
     /* SINPO logovací formulář v kartě */
     .log-form {
-      background: #1a1712;
+      background: var(--inset);
       border: 1px solid var(--border-hi);
       border-radius: 4px;
       padding: 8px;
@@ -429,8 +424,8 @@
 
     /* Panel webových streamů pro ověření ID stanice */
     .stream-box {
-      background: #121a1a;
-      border: 1px solid #233;
+      background: var(--inset);
+      border: 1px solid var(--border);
       border-left: 3px solid var(--cyan);
       border-radius: 4px;
       padding: 8px;
@@ -439,13 +434,13 @@
     }
     .stream-item {
       display: flex; justify-content: space-between; align-items: center;
-      gap: 8px; padding: 4px 0; border-bottom: 1px dashed #233;
+      gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border);
       flex-wrap: wrap;
     }
     .stream-item:last-child { border-bottom: none; }
     .stream-item a { color: var(--cyan); text-decoration: none; }
     .stream-play { font-size: 11px; padding: 3px 7px; cursor: pointer;
-      background: #122020; color: var(--cyan); border: 1px solid #2a4848; border-radius: 3px; }
+      background: var(--inset); color: var(--cyan); border: 1px solid var(--cyan); border-radius: 3px; }
 
     /* Modální panel deníku */
     .log-panel {
@@ -555,7 +550,7 @@
   </div>
   <div class="header-right">
     <div class="clock-box" id="clock">--:-- UTC</div>
-    <button type="button" class="btn-sm" id="btnTheme" title="Přepnout barevný motiv">🎨 <span id="themeName">Vibe</span></button>
+    <button type="button" class="btn-sm" id="btnTheme" title="Přepnout barevný motiv">🎨 <span id="themeName">Dark</span></button>
     <button type="button" class="btn-sm" id="btnLog">📖 Log (<span id="logCount">0</span>)</button>
   </div>
 </header>
@@ -2321,26 +2316,26 @@ document.getElementById('btnBlReset').addEventListener('click', () => {
 // 9c. BAREVNÝ MOTIV (Vibe / Night / Light) — cyklus tlačítkem, lokální persistence
 const THEME_KEY = 'dxr_theme_v1';
 const THEMES = [
-  { id: 'vibe',  name: 'Vibe' },   // výchozí: svěží oranžová na chladné tmavé
-  { id: 'night', name: 'Night' },  // původní retro jantar/rez
+  { id: 'dark',  name: 'Dark' },   // výchozí: svěží oranžová na chladné tmavé
   { id: 'light', name: 'Light' }   // světlý
 ];
+function normTheme(id) { return id === 'light' ? 'light' : 'dark'; } // migrace starých vibe/night → dark
 function applyTheme(id) {
-  const t = THEMES.find(x => x.id === id) || THEMES[0];
-  if (t.id === 'vibe') document.documentElement.removeAttribute('data-theme');
+  const t = THEMES.find(x => x.id === normTheme(id)) || THEMES[0];
+  if (t.id === 'dark') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t.id);
   const lbl = document.getElementById('themeName');
   if (lbl) lbl.textContent = t.name;
   try { localStorage.setItem(THEME_KEY, t.id); } catch (e) { /* privátní režim */ }
 }
 function loadTheme() {
-  let id = 'vibe';
-  try { id = localStorage.getItem(THEME_KEY) || 'vibe'; } catch (e) { /* default */ }
+  let id = 'dark';
+  try { id = normTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* default */ }
   applyTheme(id);
 }
 document.getElementById('btnTheme').addEventListener('click', () => {
-  let cur = 'vibe';
-  try { cur = localStorage.getItem(THEME_KEY) || 'vibe'; } catch (e) {}
+  let cur = 'dark';
+  try { cur = normTheme(localStorage.getItem(THEME_KEY)); } catch (e) {}
   const idx = THEMES.findIndex(x => x.id === cur);
   applyTheme(THEMES[(idx + 1) % THEMES.length].id);
   if (typeof lastResults !== 'undefined') evaluateStations(); // překreslí radar v nových barvách
