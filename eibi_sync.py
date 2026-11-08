@@ -310,10 +310,11 @@ def minutes_left(st, now_minutes):
 
 
 def _bl_matches(p, st):
-    """Vzor VELKÝMI = kód země (přesně); jinak celé slovo/fráze v názvu (jako PWA)."""
+    """Vzor VELKÝMI = kód země (přesně); jinak slovo/fráze v názvu, za kterou smí
+    být číslo ("cnr" ~ "CNR1", "cri" !~ "Cristiana"). Stejně jako PWA blMatches()."""
     if p == p.upper() and re.search(r"[A-Z]", p) and st.get("country", "") == p:
         return True
-    return re.search(rf"(^|[^a-z0-9]){re.escape(p.lower())}($|[^a-z0-9])",
+    return re.search(rf"(^|[^a-z0-9]){re.escape(p.lower())}($|[^a-z])",
                      (st.get("station") or "").lower()) is not None
 
 
@@ -1293,7 +1294,7 @@ def main():
     ap.add_argument("--kp", type=int, default=None,
                     help="geomagnetický index Kp (default dle scoring.js)")
     ap.add_argument("--no-blacklist", "--show-china", dest="no_blacklist", action="store_true",
-                    help="vypnout blacklist (výchozí seznam ze scoring.js: Čína + HFCC placeholdery)")
+                    help="vypnout blacklist (výchozí seznam ze scoring.js: čínské stanice dle názvu + HFCC placeholdery)")
     ap.add_argument("--eibi", action="store_true",
                     help="přidat EiBi doplněk (schedule_eibi.json, hrubá poloha) jako přepínač „+ EiBi“ v PWA")
     ap.add_argument("--limit", type=int, default=12, help="počet cílů ve výpisu (default 12)")

@@ -9,10 +9,10 @@
  * bez JS výrazů), aby ho Python spolehlivě rozparsoval. Laď jen tady — změna
  * se propíše do aplikace i do CLI radaru, takže se obě strany nerozejdou.
  *
- * blacklistDefault: skryté stanice (vypadnou úplně, i z QRM). Vzor VELKÝMI (CHN)
- * = kód země (přesná shoda) nebo celé slovo v názvu; malými (cnr) = jen celé
- * slovo/fráze v názvu stanice. Proto "cnr" neskryje Kanárské ostrovy (ITU CNR)
- * a "cri" neskryje "Radio Cristiana".
+ * blacklistDefault: skryté stanice (vypadnou úplně, i z QRM) - výchozí seznam je
+ * JEN na názvy stanic. Vzor malými (cnr) = slovo/fráze v názvu, smí za ním být
+ * číslo ("cnr" chytí "CNR1", ale "cri" ne "Radio Cristiana"). Filtr celé země si
+ * uživatel zapne dopsáním kódu VELKÝMI (CHN) - ten se porovná přesně se zemí.
  *
  * Formulový tvar (pořadí členů, MUF/skip/absorpce) je zrcadlený v obou jazycích;
  * zde žijí pouze čísla, která se reálně ladí.
@@ -55,6 +55,6 @@ window.SCORING = {
     "farPenaltyMul": 8
   },
   "qrm": { "coChannel": -25, "adjacent": -8, "loopHalves": true },
-  "blacklistDefault": ["CHN", "TIB", "china radio", "china national", "cri", "cnr",
+  "blacklistDefault": ["china radio", "china national", "cri", "cnr", "pbs", "xizang",
     "for new organization", "new organization", "disaster relief", "unknown"]
 };
