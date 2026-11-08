@@ -687,7 +687,7 @@
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
         <input type="checkbox" id="blOn" checked> <span data-i18n="bl_on">Blacklist zapnutý</span>
       </label>
-      <label style="margin-top:6px;" data-i18n-html="bl_hint">Vzory — jeden na řádek, slovo v <strong>názvu</strong> stanice. Celou <strong>zemi</strong> skryješ dopsáním kódu VELKÝMI — Čína: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Rusko: <code>RUS</code>:</label>
+      <label style="margin-top:6px;" data-i18n-html="bl_hint">Vzory — jeden na řádek, slovo v <strong>názvu</strong> stanice (např. čínské: <code>china radio</code>, <code>cri</code>, <code>cnr</code>, <code>pbs</code>). Celou <strong>zemi</strong> skryješ kódem VELKÝMI — Čína: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Rusko: <code>RUS</code>:</label>
       <textarea id="blText" rows="6" spellcheck="false" placeholder="china radio&#10;pbs&#10;CHN"></textarea>
       <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
         <button type="button" class="action-btn" id="btnBlReset" data-i18n="bl_reset">↺ Výchozí seznam</button>
@@ -767,7 +767,7 @@ const I18N = {
     w_prop: "Propagace (MUF, D-vrstva)", w_minscore: "Min. skóre (skrýt pod)",
     w_reset: "↺ Výchozí váhy", w_copy: "📋 Kopírovat váhy (JSON)",
     bl_summary: "🚫 Blacklist stanic", bl_on: "Blacklist zapnutý",
-    bl_hint: "Vzory — jeden na řádek, slovo v <strong>názvu</strong> stanice. Celou <strong>zemi</strong> skryješ dopsáním kódu VELKÝMI — Čína: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Rusko: <code>RUS</code>:",
+    bl_hint: "Vzory — jeden na řádek, slovo v <strong>názvu</strong> stanice (např. čínské: <code>china radio</code>, <code>cri</code>, <code>cnr</code>, <code>pbs</code>). Celou <strong>zemi</strong> skryješ kódem VELKÝMI — Čína: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Rusko: <code>RUS</code>:",
     bl_reset: "↺ Výchozí seznam", radar_info: "Klikni na tečku na radaru…",
     radar_leg1: "Číslo ve výseči = počet aktivních vysílačů ve směru",
     radar_leg2: '<span class="dot-g">●</span> top cíle (bez čísel, detail klepnutím) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> ostatní',
@@ -841,7 +841,7 @@ const I18N = {
     w_prop: "Propagation (MUF, D-layer)", w_minscore: "Min. score (hide below)",
     w_reset: "↺ Default weights", w_copy: "📋 Copy weights (JSON)",
     bl_summary: "🚫 Station blacklist", bl_on: "Blacklist on",
-    bl_hint: "Patterns — one per line, a word in the station <strong>name</strong>. Hide a whole <strong>country</strong> by adding its code in UPPERCASE — China: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Russia: <code>RUS</code>:",
+    bl_hint: "Patterns — one per line, a word in the station <strong>name</strong> (e.g. Chinese: <code>china radio</code>, <code>cri</code>, <code>cnr</code>, <code>pbs</code>). Hide a whole <strong>country</strong> with its code in UPPERCASE — China: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Russia: <code>RUS</code>:",
     bl_reset: "↺ Default list", radar_info: "Tap a dot on the radar…",
     radar_leg1: "Number in a sector = count of active transmitters that way",
     radar_leg2: '<span class="dot-g">●</span> top targets (no number, tap for detail) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> others',
@@ -1031,7 +1031,7 @@ function fmtParts(p) {
 // (case-insensitive, substring). Zapnutý = shoda vypadne úplně (i z QRM/radaru).
 const BL_KEY = 'dxr_blacklist_v2';
 const BL_ON_KEY = 'dxr_blacklist_on_v1';
-// Výchozí seznam sdílí s CLI (scoring.js) a je jen na názvy; kód země VELKÝMI si uživatel dopíše.
+// Výchozí seznam sdílí s CLI (scoring.js): jen HFCC placeholdery; Čínu apod. si uživatel dopíše.
 const BLACKLIST_DEFAULT = SCORING.blacklistDefault;
 const BL_KEY_V1 = 'dxr_blacklist_v1'; // starý formát: vše lowercase, substring
 let BLACKLIST = [];      // pole vzorů (velikost písmen rozlišuje kód země vs. název)
@@ -1041,10 +1041,10 @@ function loadBlacklist() {
   try {
     let raw = localStorage.getItem(BL_KEY);
     if (raw == null && localStorage.getItem(BL_KEY_V1) != null) {
-      // migrace v1: výchozí kódy zemí (chn/tib) vypadnou – filtr země si uživatel dopíše;
-      // vlastní krátké kódy (rus…) byly myšlené jako země, zkratky stanic (cri/cnr) jako název
+      // migrace v1: staré výchozí čínské vzory vypadnou (Čína se ve výchozím stavu neskrývá);
+      // vlastní krátké kódy (rus…) byly myšlené jako země → VELKÝMI
       raw = JSON.stringify(JSON.parse(localStorage.getItem(BL_KEY_V1))
-        .filter(s => !['chn', 'tib'].includes(String(s).toLowerCase()))
+        .filter(s => !['chn', 'tib', 'cri', 'cnr', 'china radio'].includes(String(s).toLowerCase()))
         .map(s => /^[a-z]{1,3}$/i.test(s) && !['cri', 'cnr'].includes(s.toLowerCase()) ? s.toUpperCase() : s));
     }
     BLACKLIST = cleanBl(raw != null ? JSON.parse(raw) : BLACKLIST_DEFAULT);

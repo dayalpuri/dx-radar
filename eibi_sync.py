@@ -1294,7 +1294,7 @@ def main():
     ap.add_argument("--kp", type=int, default=None,
                     help="geomagnetický index Kp (default dle scoring.js)")
     ap.add_argument("--no-blacklist", "--show-china", dest="no_blacklist", action="store_true",
-                    help="vypnout blacklist (výchozí seznam ze scoring.js: čínské stanice dle názvu + HFCC placeholdery)")
+                    help="vypnout blacklist (výchozí seznam ze scoring.js: jen HFCC placeholdery)")
     ap.add_argument("--eibi", action="store_true",
                     help="přidat EiBi doplněk (schedule_eibi.json, hrubá poloha) jako přepínač „+ EiBi“ v PWA")
     ap.add_argument("--limit", type=int, default=12, help="počet cílů ve výpisu (default 12)")
