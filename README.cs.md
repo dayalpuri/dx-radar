@@ -31,9 +31,11 @@ najdeš níže a v [`legal.html`](legal.html).
 | Soubor                | Role                                                        |
 |-----------------------|-------------------------------------------------------------|
 | `index.html`          | PWA „DX Radar Pro 2.0" — engine + UI + polární radar        |
-| `eibi_sync.py`        | Stahovač dat (HFCC + AOKI + EiBi → generuje `schedule.json`)    |
+| `scoring.js`          | Jediný zdroj laditelných konstant skóre (váhy, hranice, výchozí blacklist) — čte ho PWA i CLI |
+| `eibi_sync.py`        | Stahovač dat (HFCC + AOKI + EiBi → generuje `schedule.json`) + CLI radar |
 | `schedule.json`       | Vygenerovaná databáze (HFCC + AOKI, přesné pozice vysílačů), commituje se do repa |
 | `schedule_eibi.json`  | Volitelný EiBi doplněk (stanice mimo HFCC/AOKI, orientační pozice) |
+| `*.meta.json`         | Sezóna, zdroje a počet záznamů vygenerovaných souborů         |
 | `manifest.webmanifest`| PWA manifest (ikona, „Přidat na plochu")                    |
 | `sw.js`               | Service worker — po první návštěvě jede i offline           |
 | `icon-192/512.png`    | Ikony aplikace                                              |
@@ -44,12 +46,15 @@ najdeš níže a v [`legal.html`](legal.html).
 
 | Seznam | Co dává | Kde |
 |--------|---------|-----|
-| **HFCC** | zimní/letní rozvrh dle sezóny, **přesné GPS vysílačů** (site.txt), reálné výkony kW, **azimuty antén** (korekce směrovosti!), dny vysílání, jména vysílatelů | `hfcc.org/data/{a,b}26/` |
+| **HFCC** | zimní/letní rozvrh dle sezóny, **přesné GPS vysílačů** (site.txt), reálné výkony kW, **azimuty antén** (korekce směrovosti!), dny vysílání, jména vysílatelů | `hfcc.org/data/{a,b}YY/` |
 | **AOKI** (Bi Newsletter for DXers, „AOKI list"; osobní newsletter správce webu, ne oficiální NDXC) | nejlepší jména stanic, přesné souřadnice (DDMMSS), výkony, azimuty, dny; distribuce zip se Shift-JIS | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
-| **EiBi** | největší množství stanic (~6 400), často dřív než HFCC; země jen přibližně (ITU → GPS) | `eibispace.de/dx/sked-*.csv` |
+| **EiBi** | největší množství stanic (~8 000), často dřív než HFCC; poloha jen přibližně (ITU kód země → GPS); dny vysílání | `eibispace.de/dx/sked-*.csv` |
 
-Slučuje se v pořadí HFCC > AOKI > EiBi; míchání zastaralé sezóny s čerstvou je
-ošetřeno (EiBi A26 se přeskočí, existuje-li B26 z HFCC/AOKI).
+Slučuje se v pořadí HFCC > AOKI > EiBi. Záznam méně prioritního zdroje se vyřadí, jen
+když jde o totéž vysílání (stejný kmitočet + stejný název stanice nebo stejný vysílač,
+překryv času i dnů) a prioritnější zdroj ho pokrývá celý — různé stanice na stejném
+kmitočtu zůstávají vždy. Kód sezóny (`a26`, `b26`, `a27`…) se počítá z data; zdroje
+z různých sezón se nemíchají.
 
 ## SWL deník a ověření stanice přes web
 
@@ -62,13 +67,33 @@ ošetřeno (EiBi A26 se přeskočí, existuje-li B26 z HFCC/AOKI).
 ## Spuštění lokálně
 
 ```bash
-# 1) Stáhnout aktuální rozvrh a vygenerovat schedule.json (stačí 2x ročně, změna sezóny A/B)
+# 1) Stáhnout aktuální rozvrhy a vygenerovat schedule.json (na GitHubu to dělá denní cron)
 python3 eibi_sync.py --sync
 
 # 2) Lokální server pro PWA (povolí GPS/kompas na localhostu)
 python3 -m http.server 8080
 # → http://localhost:8080/
 ```
+
+## CLI radar
+
+Stejné skóre jako aplikace, v terminálu (konstanty sdílí přes `scoring.js`):
+
+```bash
+python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --alt 300 --az 180
+```
+
+| Volba | Význam |
+|-------|--------|
+| `--rx pl330\|airspy\|ats4732`, `--ant whip\|wire\|youloop` | přijímač + anténa |
+| `--sort freq\|score`, `--chance top\|mid\|low\|all`, `--limit N` | řazení, filtr skupiny skóre, počet cílů |
+| `--eibi` | přidá EiBi doplněk (`schedule_eibi.json`) jako přepínač „+ EiBi" v aplikaci |
+| `--no-blacklist` (alias `--show-china`) | vypne výchozí blacklist ze `scoring.js` |
+| `--min-score N` | min. skóre pro časová okna (default: hranice „Slyšitelné") |
+| `--sfi`, `--kp` | kosmické počasí (default ze `scoring.js`) |
+| `--json SOUBOR`, `--csv SOUBOR` | jeden explicitní datový soubor místo výchozích |
+
+`--sync --source hfcc|aoki|eibi` obnoví jen zvolený zdroj.
 
 ## Spuštění na mobilu (GitHub Pages — doporučeno)
 
@@ -98,6 +123,19 @@ Ruční obnova (např. lokálně) stejným příkazem:
 python3 eibi_sync.py --sync
 ```
 
+## Sync devel → mobil (workflow)
+
+Jediný zdroj pravdy je repozitář. Po změně sezóny (konec října / konec března):
+
+```bash
+python3 eibi_sync.py --sync          # nový schedule.json + schedule_eibi.json (+ .meta)
+git add schedule.json schedule.meta.json schedule_eibi.json schedule_eibi.meta.json
+git commit -m "B26: aktualizace rozvrhu" && git push
+# mobil si při dalším otevření online stáhne čerstvá data z Pages
+```
+
+(Běžně to ručně dělat nemusíš — commituje to denní GitHub cron.)
+
 ## Fallback GPS na mobilu
 
 - Žádné přednastavené polohy — QTH zadáš přes 📍 GPS nebo ručně a uloží se jen lokálně
@@ -107,7 +145,7 @@ python3 eibi_sync.py --sync
 
 ## Licence a právní informace
 
-- **Kód** (index.html, eibi_sync.py, sw.js, manifest, ikony, dokumentace) je pod licencí
+- **Kód** (index.html, scoring.js, eibi_sync.py, sw.js, manifest, ikony, legal.html, dokumentace) je pod licencí
   **MIT** — viz [`LICENSE`](LICENSE).
 - **Data rozvrhů** (schedule.json atd.) MIT nekryje — pocházejí z HFCC, AOKI a EiBi, každý
   pod vlastními podmínkami. Šíří se v dobré víře pro nekomerční použití.
@@ -127,4 +165,4 @@ Zdroj dat | Licence / podmínky
 ## Bez závislostí
 
 - `eibi_sync.py`: pouze standardní knihovna Pythonu 3.
-- PWA: bez frameworků, bez buildu, jediný HTML soubor + manifest + SW.
+- PWA: bez frameworků, bez buildu — `index.html` + `scoring.js` + manifest + SW.

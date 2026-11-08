@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#14110e">
+  <meta name="theme-color" content="#13151a">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png" type="image/png">
   <title>DX Radar Pro // Kontextový SWL Engine</title>
@@ -94,15 +94,6 @@
     .badge-ver { background: var(--badge-bg); color: var(--amber); padding: 2px 6px; border-radius: 3px; font-size: 11px; border: 1px solid var(--border-hi); }
     .clock-box { font-size: 18px; font-weight: bold; color: var(--amber); }
 
-    /* Rychlé QTH presety */
-    .preset-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 10px;
-      align-items: center;
-    }
-    .preset-bar span { font-size: 13px; color: var(--muted); margin-right: 4px; }
     .btn-sm {
       background: var(--panel);
       color: var(--text);
@@ -358,7 +349,7 @@
     .list-tools { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
     /* Ladicí panel (details) – slidery vah + blacklist */
     details.tuning {
-      grid-column: 1 / -1; background: var(--inset);
+      background: var(--inset);
       border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
     }
     details.tuning > summary {
@@ -403,7 +394,7 @@
     }
     .toast {
       position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%);
-      background: var(--green); color: #14110e; padding: 9px 15px;
+      background: var(--green); color: #13151a; padding: 9px 15px;
       border-radius: 4px; font-weight: bold; font-size: 13px; display: none;
       z-index: 60;
     }
@@ -537,8 +528,6 @@
       .windows-table th:nth-child(4), .windows-table td:nth-child(4) { display: none; } /* kW */
       .windows-table .w-name { overflow-wrap: anywhere; }
       .main-tab { padding: 11px 8px; }
-      .preset-bar { flex-wrap: wrap; }
-      .preset-bar .btn-sm { flex: 1 1 140px; text-align: center; }  /* GPS/Log se zalomí, ne přetečou */
       .st-meta { gap: 6px 12px; }
       .pl330-advice { flex-direction: column; align-items: stretch; }
     }
@@ -637,9 +626,9 @@
       <label><span data-i18n="chance_label">Šance úlovku</span> <span style="color:var(--muted); font-weight:400;" data-i18n="chance_note">— heuristika 5–99, ne %</span></label>
       <div class="band-pills" id="chancePills">
         <span class="band-pill active" data-chance="all" data-i18n="all">Vše</span>
-        <span class="band-pill" data-chance="top" id="chanceTop" data-i18n="chance_top">Silné</span>
-        <span class="band-pill" data-chance="mid" id="chanceMid" data-i18n="chance_mid">Slyšitelné</span>
-        <span class="band-pill" data-chance="low" id="chanceLow" data-i18n="chance_low">Slabé</span>
+        <span class="band-pill" data-chance="top" data-i18n="chance_top">Silné</span>
+        <span class="band-pill" data-chance="mid" data-i18n="chance_mid">Slyšitelné</span>
+        <span class="band-pill" data-chance="low" data-i18n="chance_low">Slabé</span>
       </div>
     </div>
     <div class="control-group full">
@@ -762,7 +751,8 @@
 //    tr(key, params) vrátí řetězec v aktuálním jazyce; {x} se nahradí z params.
 const I18N = {
   cs: {
-    subtitle: "Kontextový SWL radar krátkých vln",
+    subtitle: "Kontextový SWL radar krátkých vln", page_title: "DX Radar Pro // Kontextový SWL Engine",
+    log_save: "💾 Zapsat", radar_nsew: ["S", "J", "V", "Z"],
     footer_made: "Nekomerční hobby projekt · data: HFCC, AOKI, EiBi · vytvořeno s pomocí AI · bez záruky",
     footer_legal: "Licence, zdroje dat a soukromí",
     theme_title: "Přepnout barevný motiv", log_btn: "📖 Log",
@@ -784,7 +774,7 @@ const I18N = {
     band_label: "Filtr pásem", all: "Vše", sort_label: "Řazení stanic",
     sort_freq: "Kmitočet ▲", sort_score: "Skóre ▼",
     chance_label: "Skóre úlovku (pevné hranice)", chance_note: "— heuristika 5–99, ne %",
-    chance_top: "Silné (≥68)", chance_mid: "Slyšitelné (50–67)", chance_low: "Slabé (<50)",
+    chance_top: `Silné (≥${SCORING.boundaries.hi})`, chance_mid: `Slyšitelné (${SCORING.boundaries.mid}–${SCORING.boundaries.hi - 1})`, chance_low: `Slabé (<${SCORING.boundaries.mid})`,
     eibi_extra_label: "➕ Přidat EiBi (víc stanic, orientační poloha)",
     approx_loc: "Poloha přibližná (EiBi — střed země, ne přesný vysílač)",
     tw_sfi: "Sluneční tok:", tw_kp: "Geomagnetika:", tw_muf: "MUF odhad:", tw_cond: "Stav:",
@@ -800,7 +790,6 @@ const I18N = {
     list_noqth: "Nejdřív nastav svoji polohu (QTH) nahoře.",
     status_alt: "Výškový zisk ({alt} m): +{db} dB na nízkém úhlu",
     status_found: "Nalezeno cílů: {n} / {tot} aktivních (skóre ≥ {min})",
-    ch_top_n: "Nejlepší ⅓ (≥ {s})", ch_mid_n: "Střední ⅓ ({a}–{b})", ch_low_n: "Spodní ⅓ (< {s})",
     card_tx: "Vysílač", card_dist: "Vzdálenost", card_time: "Čas (UTC)", card_dev: "Odchylka od směru",
     card_ends: "⏹ KONČÍ ZA {n} MIN!", lbl_score: "Skóre", lbl_azimut: "Azimut",
     p_balcony: "orientace", p_beam: "míření", p_ant: "anténa", p_rx: "RX", p_power: "výkon",
@@ -836,7 +825,8 @@ const I18N = {
     loaded_n: "Načteno {n} záznamů (schedule.json)", load_fail: "⚠️ Rozvrh se nenačetl (offline?) — běží vzorek. Otevři appku online (GitHub Pages).",
     },
   en: {
-    subtitle: "Context-aware shortwave SWL radar",
+    subtitle: "Context-aware shortwave SWL radar", page_title: "DX Radar Pro // Context-aware SWL Engine",
+    log_save: "💾 Save", radar_nsew: ["N", "S", "E", "W"],
     footer_made: "Non-commercial hobby project · data: HFCC, AOKI, EiBi · built with AI · no warranty",
     footer_legal: "Licence, data sources & privacy",
     theme_title: "Switch colour theme", log_btn: "📖 Log",
@@ -858,7 +848,7 @@ const I18N = {
     band_label: "Band filter", all: "All", sort_label: "Sort stations",
     sort_freq: "Frequency ▲", sort_score: "Score ▼",
     chance_label: "Catch score (fixed bands)", chance_note: "— heuristic 5–99, not %",
-    chance_top: "Strong (≥68)", chance_mid: "Audible (50–67)", chance_low: "Weak (<50)",
+    chance_top: `Strong (≥${SCORING.boundaries.hi})`, chance_mid: `Audible (${SCORING.boundaries.mid}–${SCORING.boundaries.hi - 1})`, chance_low: `Weak (<${SCORING.boundaries.mid})`,
     eibi_extra_label: "➕ Add EiBi (more stations, approximate location)",
     approx_loc: "Approximate location (EiBi — country centroid, not the exact transmitter)",
     tw_sfi: "Solar flux:", tw_kp: "Geomagnetic:", tw_muf: "MUF est.:", tw_cond: "State:",
@@ -873,7 +863,6 @@ const I18N = {
     list_noqth: "Set your location (QTH) above first.",
     status_alt: "Altitude gain ({alt} m): +{db} dB at low angle",
     status_found: "Targets found: {n} / {tot} active (score ≥ {min})",
-    ch_top_n: "Top ⅓ (≥ {s})", ch_mid_n: "Middle ⅓ ({a}–{b})", ch_low_n: "Bottom ⅓ (< {s})",
     card_tx: "Transmitter", card_dist: "Distance", card_time: "Time (UTC)", card_dev: "Off-aim angle",
     card_ends: "⏹ ENDS IN {n} MIN!", lbl_score: "Score", lbl_azimut: "Azimuth",
     p_balcony: "aim", p_beam: "beam", p_ant: "antenna", p_rx: "RX", p_power: "power",
@@ -939,13 +928,14 @@ function applyLang() {
   document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = tr(el.dataset.i18nTitle); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = tr(el.dataset.i18nPh); });
   const ln = document.getElementById('langName'); if (ln) ln.textContent = LANG === 'cs' ? 'CZ' : 'EN';
+  document.title = tr('page_title');
 }
 function loadLang() {
   try { LANG = localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'cs'; } catch (e) { LANG = 'cs'; }
 }
 
 // 1. VZOREK DATABÁZE (Včetně čínských stanic na pozadí pro výpočet QRM kolizí!)
-//    Plnou databázi EiBi (~10 000 záznamů) vygeneruje eibi_sync.py a nahrajete ji tlačítkem 📂.
+//    Plný rozvrh (schedule.json z HFCC + AOKI, volitelně schedule_eibi.json) generuje eibi_sync.py --sync.
 let SCHEDULE_DB = [
   { freq: 5995, start: "19:00", end: "23:00", station: "ORTM Radio Mali", country: "MLI", lang: "Fr/Bambara", site: "Bamako", lat: 12.65, lon: -8.0, kw: 50, isChina: false },
   { freq: 6015, start: "18:00", end: "20:00", station: "ZBC Radio Zanzibar", country: "TZA", lang: "Swahili", site: "Dole", lat: -6.10, lon: 39.26, kw: 50, isChina: false },
@@ -1521,7 +1511,7 @@ function evaluateStations() {
         <label class="sinpo-lbl">P</label><input type="number" id="sin-p-${cid}" min="1" max="5" value="3">
         <label class="sinpo-lbl">O</label><input type="number" id="sin-o-${cid}" min="1" max="5" value="3">
         <input type="text" id="lognote-${cid}" placeholder="${tr('note_ph')}" style="flex:1; min-width:120px;">
-        <button class="log-btn" onclick="saveLogEntry('${cid}')">💾 Zapsat</button>
+        <button class="log-btn" onclick="saveLogEntry('${cid}')">${tr('log_save')}</button>
       </div>
       <div class="stream-box" id="streambox-${cid}" style="display:none">${tr("stream_searching")}</div>
     </div>
@@ -1677,10 +1667,11 @@ function drawRadar(results, balconyAz, activeAll) {
   ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
   ctx.fillStyle = cMuted;
   ctx.font = 'bold 12px monospace';
-  ctx.fillText('S', cx - 4, cy - R - 4);
-  ctx.fillText('J', cx - 4, cy + R + 14);
-  ctx.fillText('V', cx + R + 4, cy + 4);
-  ctx.fillText('Z', cx - R - 13, cy + 4);
+  const [cN, cS, cE, cW] = I18N[LANG].radar_nsew; // CZ: S/J/V/Z, EN: N/S/E/W
+  ctx.fillText(cN, cx - 4, cy - R - 4);
+  ctx.fillText(cS, cx - 4, cy + R + 14);
+  ctx.fillText(cE, cx + R + 4, cy + 4);
+  ctx.fillText(cW, cx - R - 13, cy + 4);
 
   // Sektor balkónu (obrys kardioidní masky ±45°)
   ctx.beginPath();
@@ -1853,7 +1844,7 @@ function exportLogMd() {
   if (!log.length) return alert(tr('log_empty_alert'));
   const md = log.map(e =>
     `- **${e.freq} kHz** | **${e.station}** (${e.site}) | ${e.date} ${e.utc} UTC | ` +
-    `${e.dist.toLocaleString('cs-CZ')} km (${e.bearing}°) | QTH: ${e.alt}m | RX: ${e.rx} | ` +
+    `${Number(e.dist).toLocaleString(LANG === 'cs' ? 'cs-CZ' : 'en-US')} km (${e.bearing}°) | QTH: ${e.alt}m | RX: ${e.rx} | ` +
     `SINPO: ${e.sinpo}${e.note ? ' | ' + e.note : ''}`).join('\n');
   navigator.clipboard.writeText(md).then(() => {
     const t = document.getElementById('toast');
@@ -2302,7 +2293,7 @@ document.getElementById('btnBlReset').addEventListener('click', () => {
   saveBlacklist(); updateBlStatus(); evaluateStations();
 });
 
-// 9c. BAREVNÝ MOTIV (Vibe / Night / Light) — cyklus tlačítkem, lokální persistence
+// 9c. BAREVNÝ MOTIV (Dark / Light) — přepínač tlačítkem, lokální persistence
 const THEME_KEY = 'dxr_theme_v1';
 const THEMES = [
   { id: 'dark',  name: 'Dark' },   // výchozí: svěží oranžová na chladné tmavé

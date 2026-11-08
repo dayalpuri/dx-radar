@@ -25,10 +25,12 @@ SOFTWARE.
 NOTE ON BUNDLED DATA (NOT covered by the MIT licence above)
 
 The MIT licence covers only the original source code of this project
-(index.html, eibi_sync.py, sw.js, manifest.webmanifest, icons and documentation).
+(index.html, scoring.js, eibi_sync.py, sw.js, manifest.webmanifest, icons,
+legal.html and documentation).
 
-The broadcast-schedule data files (schedule.json, schedule_eibi.json, sked_eibi.csv and
-any schedule data downloaded at runtime) are NOT original to this project. They
+The broadcast-schedule data files (schedule.json, schedule_eibi.json and their
+.meta.json files, plus the EiBi CSV downloaded by eibi_sync.py) are NOT original
+to this project. They
 are compiled from third-party sources, each under its own terms:
 
   - HFCC/IBD public data   — http://www.hfcc.org/  (publicly published

@@ -2,11 +2,11 @@
 """
 eibi_sync.py - Data Harvester + CLI radar pro Balkónový DX Engine.
 
-Dvě funkce v jednom souboru (společný datový základ pro PWA dx-radar.html):
+Dvě funkce v jednom souboru (společný datový základ pro PWA index.html):
 
-  1. HARVESTER:  stáhne aktuální rozvrh EiBi (sked-*.csv), spáruje země ITU kódem
-                 s přibližnými GPS souřadnicemi, označí čínské vysílače
-                 (isChina: true) a vygeneruje schedule.json (+ schedule_eibi.json) pro PWA.
+  1. HARVESTER:  stáhne sezónní rozvrhy HFCC + AOKI (přesné souřadnice vysílačů,
+                 výkony, azimuty, dny) -> schedule.json, a EiBi (sked-*.csv, země
+                 dle ITU kódu jen s přibližnou polohou) -> doplněk schedule_eibi.json.
 
   2. CLI RADAR:  s parametrem --now vypíše stejný "DX Radar" jako PWA přímo
                  do terminálu. Skóre počítá 1:1 stejně jako aplikace - obě
@@ -22,6 +22,7 @@ Použití:
   python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --alt 300 --az 50   # radar pro zadané QTH
   python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --rx airspy --ant youloop   # jiná sestava
   python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --sort score --chance top   # jen silné, dle šance
+  python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --eibi --no-blacklist      # + EiBi doplněk, bez blacklistu
 """
 
 import argparse
@@ -252,13 +253,6 @@ SAMPLE_DB = [
     {"freq": 6676, "start": "00:00", "end": "23:59", "station": "Bangkok / Mumbai VOLMET", "country": "THA/IND", "lang": "English (USB)", "site": "Bangkok/Mumbai", "lat": 13.75, "lon": 100.50, "kw": 10, "isChina": False},
 ]
 
-BAND_NAMES = [(3200, "120m"), (4750, "90m"), (5006, "60m"),
-              (6200, "49m"), (7450, "41m"), (9900, "31m"),
-              (12100, "25m"), (13860, "22m"), (15800, "19m"),
-              (17480, "16m"), (19020, "15m"), (21850, "13m"),
-              (26100, "11m"), (99999, "13m")]
-
-
 # ---------------------------------------------------------------------------
 # SFÉRICKÁ MATEMATIKA (Haversine + počáteční azimut ortodromy)
 # ---------------------------------------------------------------------------
@@ -280,15 +274,6 @@ def compass_dir(az):
     dirs = ['S', 'SSV', 'SV', 'VSV', 'V', 'VJV', 'JV', 'JJV',
             'J', 'JJZ', 'JZ', 'ZJZ', 'Z', 'ZSZ', 'SZ', 'SSZ']  # sever/východ/jih/západ
     return dirs[jround(az / 22.5) % 16]
-
-
-def band_name(freq):
-    if freq < 2300:
-        return "120m"
-    for hi, name in BAND_NAMES:
-        if freq <= hi:
-            return name
-    return "11m"
 
 
 def is_time_active(start, end, now_minutes):
@@ -480,7 +465,7 @@ def parse_eibi_days(raw):
 
 
 def parse_eibi_csv(csv_path):
-    """Rozparsuje sked-*.csv do záznamů kompatibilních s PWA (dx-radar.html).
+    """Rozparsuje sked-*.csv do záznamů kompatibilních s PWA (index.html).
 
     Formát EiBi (oddělovač ';', první řádek = hlavička):
       0: kHz, 1: HHMM-HHMM, 2: dny, 3: ITU země, 4: stanice, 5: jazyk,
@@ -533,14 +518,6 @@ def parse_eibi_csv(csv_path):
     if skipped:
         top = ", ".join(f"{k or '?'}:{v}" for k, v in sorted(skipped.items(), key=lambda kv: -kv[1]))
         print(f"[!] EiBi: {sum(skipped.values())} záznamů bez souřadnic země přeskočeno ({top}).")
-    return records
-
-
-def convert_eibi_csv_to_json(csv_path, out_json=DEFAULT_OUT_JSON):
-    records = parse_eibi_csv(csv_path)
-    if not records:
-        print("[!] Ze souboru EiBi nepřišel žádný použitelný záznam.")
-        return None
     return records
 
 

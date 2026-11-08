@@ -32,9 +32,11 @@ licensing are below and in [`legal.html`](legal.html).
 | File                  | Role                                                        |
 |-----------------------|-------------------------------------------------------------|
 | `index.html`          | PWA "DX Radar Pro 2.0" — engine + UI + polar radar          |
-| `eibi_sync.py`        | Data harvester (HFCC + AOKI + EiBi → builds `schedule.json`)     |
+| `scoring.js`          | Single source of tunable score constants (weights, thresholds, default blacklist) — read by both the PWA and the CLI |
+| `eibi_sync.py`        | Data harvester (HFCC + AOKI + EiBi → builds `schedule.json`) + CLI radar |
 | `schedule.json`       | Generated database (HFCC + AOKI, precise transmitter positions) committed to the repo |
 | `schedule_eibi.json`  | Optional EiBi supplement (stations not in HFCC/AOKI, approximate positions) |
+| `*.meta.json`         | Season, sources and record count of the generated files      |
 | `manifest.webmanifest`| PWA manifest (icon, "Add to Home Screen")                   |
 | `sw.js`               | Service worker — works offline after the first visit        |
 | `icon-192/512.png`    | App icons                                                   |
@@ -45,12 +47,15 @@ licensing are below and in [`legal.html`](legal.html).
 
 | List | What it provides | Where |
 |------|------------------|-------|
-| **HFCC** | seasonal (winter/summer) schedule, **exact transmitter GPS** (site.txt), real power in kW, **antenna azimuths** (directivity!), broadcast days, broadcaster names | `hfcc.org/data/{a,b}26/` |
+| **HFCC** | seasonal (winter/summer) schedule, **exact transmitter GPS** (site.txt), real power in kW, **antenna azimuths** (directivity!), broadcast days, broadcaster names | `hfcc.org/data/{a,b}YY/` |
 | **AOKI** (Bi Newsletter for DXers, "AOKI list"; personal newsletter of the site maintainer, not official NDXC) | best station names, precise coordinates (DDMMSS), power, azimuths, days; distributed as a Shift-JIS zip | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
-| **EiBi** | the largest number of stations (~6,400), often ahead of HFCC; country only approximate (ITU → GPS) | `eibispace.de/dx/sked-*.csv` |
+| **EiBi** | the largest number of stations (~8,000), often ahead of HFCC; position only approximate (ITU country code → GPS); days of operation | `eibispace.de/dx/sked-*.csv` |
 
-Merged in the order HFCC > AOKI > EiBi; mixing a stale season with a fresh one is
-handled (EiBi A26 is skipped if a B26 from HFCC/AOKI exists).
+Merged in the order HFCC > AOKI > EiBi. A lower-priority record is dropped only if it
+is the same broadcast (same frequency + same station name or the same transmitter site,
+overlapping time and days) and is fully covered by the higher-priority source — different
+stations sharing a frequency always stay. The season code (`a26`, `b26`, `a27`…) is
+derived from the date; sources from different seasons are never mixed.
 
 ## SWL log & web station verification
 
@@ -64,13 +69,33 @@ handled (EiBi A26 is skipped if a B26 from HFCC/AOKI exists).
 ## Running locally
 
 ```bash
-# 1) Download the current schedule and build schedule.json (twice a year is enough, at the A/B season change)
+# 1) Download the current schedules and build schedule.json (the GitHub cron does this daily)
 python3 eibi_sync.py --sync
 
 # 2) Serve the PWA locally (enables GPS/compass on localhost)
 python3 -m http.server 8080
 # → http://localhost:8080/
 ```
+
+## CLI radar
+
+The same scoring as the app, in the terminal (constants shared via `scoring.js`):
+
+```bash
+python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --alt 300 --az 180
+```
+
+| Option | Meaning |
+|--------|---------|
+| `--rx pl330\|airspy\|ats4732`, `--ant whip\|wire\|youloop` | receiver + antenna |
+| `--sort freq\|score`, `--chance top\|mid\|low\|all`, `--limit N` | ordering, score group filter, number of targets |
+| `--eibi` | add the EiBi supplement (`schedule_eibi.json`), like the "+ EiBi" switch in the app |
+| `--no-blacklist` (alias `--show-china`) | disable the default blacklist from `scoring.js` |
+| `--min-score N` | minimum score for time windows (default: the "Audible" boundary) |
+| `--sfi`, `--kp` | space weather (default from `scoring.js`) |
+| `--json FILE`, `--csv FILE` | use one explicit data file instead |
+
+`--sync --source hfcc|aoki|eibi` refreshes only the chosen source.
 
 ## Running on mobile (GitHub Pages — recommended)
 
@@ -123,7 +148,7 @@ git commit -m "B26: schedule update" && git push
 
 ## Licence & legal
 
-- **Code** (index.html, eibi_sync.py, sw.js, manifest, icons, docs) is licensed under
+- **Code** (index.html, scoring.js, eibi_sync.py, sw.js, manifest, icons, legal.html, docs) is licensed under
   **MIT** — see [`LICENSE`](LICENSE).
 - **Schedule data** (schedule.json etc.) is NOT covered by MIT — it comes from HFCC, AOKI
   and EiBi, each under its own terms, redistributed in good faith for non-commercial use.
@@ -143,4 +168,4 @@ Data source | Licence / terms
 ## No dependencies
 
 - `eibi_sync.py`: Python 3 standard library only.
-- PWA: no frameworks, no build step, a single HTML file + manifest + SW.
+- PWA: no frameworks, no build step — `index.html` + `scoring.js` + manifest + SW.
