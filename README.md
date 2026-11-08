@@ -1,140 +1,136 @@
-# DX Radar Pro — Kontextový SWL Engine
+# DX Radar Pro — Context-aware SWL Engine
 
-**Co právě teď chytíš na krátkých vlnách?** DX Radar je pomocník pro posluchače
-krátkovlnného rozhlasu (SWL). Vezme aktuální seznam vysílání, tvoji polohu a čas
-a seřadí stanice podle toho, jak reálná je jejich slyšitelnost — abys neztrácel čas
-laděním stanic, které k tobě stejně nedoletí. Výsledek ukáže jako skóre i jako
-polární radar kolem tvé pozice.
+*English · [Česky](README.cs.md)*
 
-Skóre počítá z věcí, které rozhodují o příjmu:
+**What can you actually hear on shortwave right now?** DX Radar is a helper for
+shortwave listeners (SWL). It takes the current broadcast schedule, your location
+and the time, and ranks stations by how realistic their reception is — so you don't
+waste time tuning to stations that won't reach you anyway. Results are shown as a
+score and as a polar radar around your position.
 
-- **vzdálenost a směr** stanice (velkokružnicová geometrie) a kam máš volný výhled na oblohu,
-- **denní doba a stav ionosféry** — přes den jdou vyšší pásma, večer nižší; data o kosmickém počasí (SFI/Kp) tahá z NOAA,
-- **mrtvá zóna (skip)** — silná blízká stanice na vysokém pásmu může „přeletět" nad hlavou,
-- **výkon a směrování vysílače** (kam míří jeho anténa),
-- **rušení sousedních kanálů** a tvoje sestava **přijímač + anténa**.
+The score is computed from the things that actually drive reception:
 
-Běží jako webová aplikace (PWA) — po první návštěvě i offline. Postaveno v konverzaci
-s AI; data z veřejných rozvrhů (HFCC, AOKI, EiBi). Podrobnosti o přesnosti a licencích
-najdeš níže a v [`legal.html`](legal.html).
+- **distance and direction** of the station (great-circle geometry) and where you have a clear view of the sky,
+- **time of day and ionospheric state** — higher bands open in daytime, lower bands at night; space-weather data (SFI/Kp) is pulled from NOAA,
+- **the skip zone** — a strong nearby station on a high band can "skip" over your head,
+- **transmitter power and beaming** (where its antenna points),
+- **adjacent-channel interference** and your **receiver + antenna** setup.
 
-## Soubory
+It runs as a web app (PWA) — offline after the first visit. Built in conversation
+with AI; data from public schedules (HFCC, AOKI, EiBi). Details on accuracy and
+licensing are below and in [`legal.html`](legal.html).
 
-| Soubor                | Role                                                        |
+## Files
+
+| File                  | Role                                                        |
 |-----------------------|-------------------------------------------------------------|
-| `index.html`          | PWA „DX Radar Pro 2.0" — engine + UI + polární radar |
-| `eibi_sync.py`         | Data Harvester + CLI radar (HFCC + AOKI + EiBi, generování `eibi.json`, terminálový výstup `--now`) |
-| `eibi.json`           | Vygenerovaná databáze vysílacích oken (commituje se do repa = sync do mobilu) |
-| `manifest.webmanifest`| PWA manifest (ikona, „Přidat na plochu")                    |
-| `sw.js`               | Service worker — po první návštěvě jede i offline           |
-| `icon-192/512.png`    | Ikony aplikace                                              |
-| `legal.html`          | Licence, atribuce zdrojů dat a zásady soukromí (CZ/EN)      |
-| `LICENSE`             | MIT licence kódu (data vyňata — vlastní podmínky zdrojů)    |
+| `index.html`          | PWA "DX Radar Pro 2.0" — engine + UI + polar radar          |
+| `eibi_sync.py`        | Data harvester (HFCC + AOKI + EiBi → builds `eibi.json`)     |
+| `eibi.json`           | Generated database of broadcast windows (committed to the repo = synced to mobile) |
+| `manifest.webmanifest`| PWA manifest (icon, "Add to Home Screen")                   |
+| `sw.js`               | Service worker — works offline after the first visit        |
+| `icon-192/512.png`    | App icons                                                   |
+| `legal.html`          | Licence, data-source attribution and privacy (EN/CS)        |
+| `LICENSE`             | MIT licence for the code (data excluded — own source terms) |
 
-## Zdroje dat (čím víc seznamů, tím líp)
+## Data sources (the more lists, the better)
 
-| Seznam | Co dává | Kde |
-|--------|---------|-----|
-| **HFCC** | zimní/letní rozvrh dle skutečné sezóny, **přesné GPS vysílačů** (site.txt), reálné výkony kW, **azimuty antén** (korekce směrovosti!), dny vysílání, jména vysílatelů | `hfcc.org/data/{a,b}26/` |
-| **AOKI** (Bi Newsletter for DXers, „AOKI list"; osobní newsletter správce webu, ne oficiální NDXC) | nejlepší jména stanic, přesné souřadnice (DDMMSS), výkony, azimuty, dny; distribuce zip se Shift-JIS | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
-| **EiBi** | největší množství stanic (~6 400), často dřív než HFCC; země jen přibližně (ITU → GPS) | `eibispace.de/dx/sked-*.csv` |
+| List | What it provides | Where |
+|------|------------------|-------|
+| **HFCC** | seasonal (winter/summer) schedule, **exact transmitter GPS** (site.txt), real power in kW, **antenna azimuths** (directivity!), broadcast days, broadcaster names | `hfcc.org/data/{a,b}26/` |
+| **AOKI** (Bi Newsletter for DXers, "AOKI list"; personal newsletter of the site maintainer, not official NDXC) | best station names, precise coordinates (DDMMSS), power, azimuths, days; distributed as a Shift-JIS zip | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
+| **EiBi** | the largest number of stations (~6,400), often ahead of HFCC; country only approximate (ITU → GPS) | `eibispace.de/dx/sked-*.csv` |
 
-Slučuje se v pořadí HFCC > AOKI > EiBi; míchání zastaralé sezóny s čerstvou je
-ošetřeno (EiBi A26 se přeskočí, existuje-li B26 z HFCC/AOKI). CLI: `--source all|hfcc|aoki|eibi`.
+Merged in the order HFCC > AOKI > EiBi; mixing a stale season with a fresh one is
+handled (EiBi A26 is skipped if a B26 from HFCC/AOKI exists).
 
-## SWL deník a ověření stanice přes web
+## SWL log & web station verification
 
-- **📝 Log** v každé kartě: zapsání SINPO (5 číslic) + poznámky do deníku (localStorage).
-- **📖 Log** v horní liště: celý deník, mazání záznamů, **📋 Export MD**
-  (Markdown řádky pro Obsidian — číslované jako v původním návrhu).
-- **🎧 Stream** v každé kartě: ověření ID přijaté stanice přes její webové
-  streamy (databáze radio-browser.info, jen https streamy kvůli mixed-content).
-  Přesné shody ✅, volné shody ❔ (srovnejte sluchem) + Google fallback na web stanice.
+- **📝 Log** on each card: record SINPO (5 digits) + notes into the log (localStorage).
+- **📖 Log** in the top bar: the full log, deleting entries, **📋 Export MD**
+  (Markdown lines for Obsidian).
+- **🎧 Stream** on each card: verify the ID of a received station via its web
+  streams (radio-browser.info database, https streams only due to mixed-content).
+  Exact matches ✅, loose matches ❔ (compare by ear) + Google fallback to the station's site.
 
-## Použití na notebooku (CLI + lokální PWA)
+## Running locally
 
 ```bash
-# 1) Stáhnout aktuální rozvrh EiBi a vygenerovat eibi.json (stačí 2x ročně, změna sezóny A/B)
+# 1) Download the current schedule and build eibi.json (twice a year is enough, at the A/B season change)
 python3 eibi_sync.py --sync
 
-# 2) CLI radar pro terminál — zadej svoje QTH (šířka, délka, nadm. výška, azimut balkónu)
-python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --alt 300 --az 180
-python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --rx loop --show-china
-
-# 3) PWA lokálně (povolí GPS/kompas na localhostu)
+# 2) Serve the PWA locally (enables GPS/compass on localhost)
 python3 -m http.server 8080
 # → http://localhost:8080/
 ```
 
-## Použití na mobilu (GitHub Pages — doporučeno)
+## Running on mobile (GitHub Pages — recommended)
 
-`file://` blokuje GPS, kompas i schránku. Proto se PWA hostuje přes GitHub Pages,
-kde běží na `https://` a vše funguje:
+`file://` blocks GPS, compass and clipboard. The PWA is therefore hosted on GitHub
+Pages, where it runs over `https://` and everything works:
 
-1. Pushni tento repozitář na GitHub (viz níže).
-2. Na GitHubu: **Settings → Pages → Deploy from a branch → `main` / root**.
-3. Na mobilu otevři `https://<uzivatel>.github.io/dx-radar/`
-   a v menu Chrome zvol **„Přidat na plochu"** — vznikne plnohodnotná aplikace.
-4. Po první návštěvě funguje i **offline** (service worker) — na balkoně
-   v letadlovém režimu stačí GPS presety a vestavěná data.
+1. Push this repository to GitHub.
+2. On GitHub: **Settings → Pages → Deploy from a branch → `main` / root**.
+3. On mobile open `https://<user>.github.io/dx-radar/` and in the Chrome menu choose
+   **"Add to Home Screen"** — you get a full-fledged app.
+4. After the first visit it also works **offline** (service worker) — in airplane
+   mode the GPS entry and bundled data are enough.
 
-## Aktualizace dat rozvrhů (2 cesty)
+## Updating the schedule data (2 ways)
 
-**A) Přímo v PWA (bez Pythonu):** tlačítko **⬇️ Stáhnout rozvrh** stáhne aktuální
-sezónu přímo v prohlížeči — nejprve HFCC (`B26all00.TXT` + `site.txt` +
-`broadcas.txt`, tedy přesné souřadnice, výkony, azimuty a dny), po pádu HFCC
-EiBi CSV. Oba servery neposílají CORS hlavičky, proto se používá fallback přes
-Jina reader. Data se uloží do `localStorage` — přežijí restart i letadlový
-režim. Případný nezdar zobrazí instrukce k ruční cestě přes 📂 import
-(PWA umí `.csv` i `.json`).
+**A) Directly in the PWA (no Python):** the **⬇️ Download schedule** button fetches
+the current season in the browser — HFCC first (`B26all00.TXT` + `site.txt` +
+`broadcas.txt`: exact coordinates, power, azimuths and days), falling back to the
+EiBi CSV if HFCC fails. Neither server sends CORS headers, so a Jina-reader proxy
+is used as a fallback. Data is saved to `localStorage` and survives restarts and
+airplane mode. On failure the app shows instructions for the manual 📂 import route
+(the PWA reads `.csv` and `.json`).
 
-**B) Pres notebook (klasicky):** `python3 eibi_sync.py --sync` sloučí HFCC + EiBi
-a vygeneruje `eibi.json`, který se commitne do repa — PWA ho použije jako
-výchozí databázi, dokud si uživatel nestáhne vlastní.
+**B) Via a laptop (classic):** `python3 eibi_sync.py --sync` merges HFCC + AOKI + EiBi
+and builds `eibi.json`, which you commit to the repo — the PWA uses it as the default
+database until the user downloads their own.
 
-Priorita zdrojů při startu: `localStorage` (naposledy synchronizovaná) →
-`eibi.json` v repu → vestavěný vzorek.
+Source priority at startup: `localStorage` (last synced) → `eibi.json` in the repo →
+built-in sample.
 
-## Sync devel → mobil (workflow)
+## Sync devel → mobile (workflow)
 
-Repositář je jediný zdroj pravdy. Po změně sezóny (konec října / konec března):
+The repository is the single source of truth. After a season change (end of October /
+end of March):
 
 ```bash
-python3 eibi_sync.py --sync          # nové eibi.json
-git add eibi.json && git commit -m "B26: aktualizace rozvrhu EiBi" && git push
-# mobil si při příštím online otevření veme čerstvá data z Pages
+python3 eibi_sync.py --sync          # new eibi.json
+git add eibi.json && git commit -m "B26: schedule update" && git push
+# on next online open, mobile picks up fresh data from Pages
 ```
 
-Stejný vzor lze použít i pro další devel projekty (`gramo`, …): každý projekt
-jako vlastní repozitář → `gh pages` → na mobilu přidáno na plochu.
+## Mobile GPS fallback
 
-## Fallback GPS na mobilu
+- No preset locations — enter the QTH via 📍 GPS or manually; it is stored only
+  locally (localStorage in this browser / installed PWA), never in the repo.
+- 📍 GPS button: over `https://` (Pages) full GPS + compass; on `file://` or if GPS
+  is denied it tries an approximate location from IP (±50 km).
 
-- Žádné přednastavené polohy — QTH zadáš přes 📍 GPS nebo ručně a uloží se
-  jen lokálně (localStorage v tomto prohlížeči / nainstalované PWA), nikdy do repa.
-- Tlačítko 📍 GPS: přes `https://` (Pages) plná GPS + kompas; při `file://`
-  nebo odmítnutí GPS zkusí přibližnou polohu z IP (±50 km).
+## Licence & legal
 
-## Licence a právní informace
+- **Code** (index.html, eibi_sync.py, sw.js, manifest, icons, docs) is licensed under
+  **MIT** — see [`LICENSE`](LICENSE).
+- **Schedule data** (eibi.json etc.) is NOT covered by MIT — it comes from HFCC, AOKI
+  and EiBi, each under its own terms, redistributed in good faith for non-commercial use.
+- Full attribution, usage terms, the disclaimer ("as is", built with AI) and the
+  privacy/GDPR notice are in [`legal.html`](legal.html) (bilingual EN/CS; also linked
+  from the app footer).
 
-- **Kód** (index.html, eibi_sync.py, sw.js, manifest, ikony, dokumentace) je pod licencí
-  **MIT** — viz [`LICENSE`](LICENSE).
-- **Data rozvrhů** (eibi.json atd.) MIT nekryje — pocházejí z HFCC, AOKI a EiBi,
-  každý pod vlastními podmínkami. Šíří se v dobré víře pro nekomerční použití.
-- Kompletní atribuce zdrojů dat, podmínky užití, vyloučení odpovědnosti („as is",
-  vytvořeno s pomocí AI) a zásady soukromí/GDPR jsou v [`legal.html`](legal.html)
-  (dvojjazyčně CZ/EN, odkaz je i v patičce aplikace).
+Data source | Licence / terms
+------------|----------------
+**EiBi** | free use incl. third-party software (by Eike Bierwirth, eibispace.de)
+**HFCC/IBD** | public coordination data ("Public Data Files", free access), hfcc.org
+**Bi Newsletter ("AOKI list")** | compiler states no licence; redistributed in good faith, non-commercial, with attribution (DX-community convention)
 
-Zdroj dat | Licence / podmínky
-----------|-------------------
-**EiBi** | volné použití vč. software třetích stran (autor Eike Bierwirth, eibispace.de)
-**HFCC/IBD** | veřejná koordinační data („Public Data Files", free access), hfcc.org
-**Bi Newsletter („AOKI list")** | tvůrce neuvádí licenci; šířeno v dobré víře nekomerčně s atribucí (zvyklost DX komunity)
+> The app itself stores no personal data (no backend, cookies or analytics); user
+> settings live only in `localStorage`. Details in `legal.html`.
 
-> Aplikace sama neukládá žádná osobní data (žádný backend, cookies ani analytika);
-> uživatelská nastavení žijí jen v `localStorage`. Detaily v `legal.html`.
+## No dependencies
 
-## Bez závislostí
-
-- `eibi_sync.py`: pouze standardní knihovna Pythonu 3.
-- PWA: bez frameworků, bez buildu, jediný HTML soubor + manifest + SW.
+- `eibi_sync.py`: Python 3 standard library only.
+- PWA: no frameworks, no build step, a single HTML file + manifest + SW.
