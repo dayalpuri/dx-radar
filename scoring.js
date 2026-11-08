@@ -35,7 +35,8 @@ window.SCORING = {
     "youloopAirspyBonus": 14
   },
   "power": { "centerKw": 100, "mul": 14 },
-  "muf": { "const": 6, "sfiMul": 0.09, "dayBoost": 8, "dayStartH": 8, "dayEndH": 16 },
+  "muf": { "const": 6, "sfiMul": 0.09, "dayBoost": 8, "dayStartH": 8, "dayEndH": 16,
+    "smoothFromDeg": -6, "smoothToDeg": 20 },
   "prop": {
     "aboveMufPenalty": -35,
     "nearMufPenalty": -10,
@@ -55,6 +56,7 @@ window.SCORING = {
     "farDivKm": 2000,
     "farPenaltyMul": 8
   },
-  "qrm": { "coChannel": -25, "adjacent": -8, "adjacentBoth": -16, "loopHalves": true },
+  "qrm": { "coChannel": -25, "adjacent": -8, "adjacentBoth": -16, "loopHalves": true,
+    "minInterfererScore": 45, "louderMargin": 3 },
   "blacklistDefault": ["for new organization", "new organization", "disaster relief", "unknown"]
 };

@@ -1112,15 +1112,21 @@ function isTimeActive(startStr, endStr, nowMinutes) {
 //    Při online připojení stáhne SFI a Kp; jinak použije klidový odhad (142 / 2).
 const SPACE_WX = { sfi: SCORING.spaceWeatherDefault.sfi, kp: SCORING.spaceWeatherDefault.kp, live: false };
 
-function mufEstimate(sfi, utcHours, pathSunlit = false) {
+function mufEstimate(sfi, utcHours, daylight = 0) {
   // Empirická heuristika: noční MUF ~ const + sfiMul*SFI, denní +dayBoost MHz (vrstva F2).
-  // pathSunlit: když je prostředek trasy osvětlený Sluncem (např. ranní otevření na východ),
-  // platí denní MUF i mimo lokální okno. Bez něj by model srážel reálné ranní úlovky na
-  // 15–17 MHz (gray-line na východ je osvětlený dřív než naše lokální poledne).
+  // daylight 0..1 = osvětlení prostředku trasy (pathDaylight) – denní MUF náběhne plynule
+  // přes soumrak, ne skokem (např. ranní otevření na východ dřív než naše poledne).
+  // V lokálním okně dayStartH–dayEndH platí plný denní MUF vždy (kalibrace).
   const m = SCORING.muf;
   const base = m.const + m.sfiMul * sfi;
-  const daytime = (utcHours >= m.dayStartH && utcHours <= m.dayEndH) || pathSunlit;
-  return Math.round(daytime ? base + m.dayBoost : base);
+  const win = utcHours >= m.dayStartH && utcHours <= m.dayEndH ? 1 : 0;
+  return Math.round(base + m.dayBoost * Math.max(win, daylight));
+}
+// Plynulé osvětlení prostředku trasy: 0 = noc (Slunce ≤ smoothFromDeg), 1 = den (≥ smoothToDeg)
+function pathDaylight(lat1, lon1, lat2, lon2, date) {
+  const m = SCORING.muf;
+  const el = solarElevation((lat1 + lat2) / 2, (lon1 + lon2) / 2, date);
+  return Math.min(1, Math.max(0, (el - m.smoothFromDeg) / (m.smoothToDeg - m.smoothFromDeg)));
 }
 
 function geomagLabel(kp) {
@@ -1158,10 +1164,10 @@ function dayAbsorption(freq, myLat, myLon, stLat, stLon, date) {
   return -Math.round(Math.sin(sunEl * Math.PI / 180) * freqFactor * da.maxPenalty);
 }
 
-function propagationAdjust(freq, bearing, sfi, kp, utcHours, pathSunlit = false) {
+function propagationAdjust(freq, bearing, sfi, kp, utcHours, daylight = 0) {
   // Frekvenční okno LUF–MUF: co je nad MUF, vyletí do vesmíru (-35); hraniční -10.
   const p = SCORING.prop;
-  const muf = mufEstimate(sfi, utcHours, pathSunlit);
+  const muf = mufEstimate(sfi, utcHours, daylight);
   let adj = 0;
   if (freq > muf * 1000 + p.mufMarginKHz) adj += p.aboveMufPenalty;
   else if (freq > muf * 1000 - p.mufMarginKHz) adj += p.nearMufPenalty;
@@ -1244,32 +1250,50 @@ function stationKey(st) {
 
 const passesDay = (st, dayNum) => !st.days || st.days.includes(String(dayNum));
 
+// Skóre dopadu na QTH = skóre bez QRM (cache v env, každý přepočet má nové env).
+// Rozhoduje, který záznam téže stanice nechat a kdo je reálný rušitel.
+function arrivalScore(st, env) {
+  if (!env.arrival) env.arrival = new WeakMap();
+  let v = env.arrival.get(st);
+  if (v == null) { v = scoreStation(st, env, null).score; env.arrival.set(st, v); }
+  return v;
+}
+// Rušitel se počítá, jen když sám na QTH dopadá a dopadá silněji než stanice
+// (500 kW, který do Evropy nedoletí, neruší). Prahy viz scoring.js → qrm.
+function louder(o, st, env) {
+  const q = SCORING.qrm, ao = arrivalScore(o, env);
+  return ao >= q.minInterfererScore && ao > arrivalScore(st, env) + q.louderMargin;
+}
+
 // Deduplikace téhož vysílání napříč zdroji: přesná poloha (HFCC/AOKI) má přednost
-// před EiBi centroidem země (approxLoc), teprve pak rozhoduje vyšší výkon.
-function preferRecord(a, b) {
+// před EiBi centroidem země (approxLoc), pak záznam s lepším dopadem na QTH (vysílač
+// a anténa mířící k nám), teprve pak vyšší výkon.
+function preferRecord(a, b, env) {
   if (!!a.approxLoc !== !!b.approxLoc) return a.approxLoc ? b : a;
+  const sa = arrivalScore(a, env), sb = arrivalScore(b, env);
+  if (sa !== sb) return sb > sa ? b : a;
   return b.kw > a.kw ? b : a;
 }
 // Stejné vysílací místo (do 10 km) – jen přesné polohy, ne EiBi centroid země
 const SAME_SITE_KM = 10;
 const sameSite = (a, b) => !a.approxLoc && !b.approxLoc &&
   calcGeodesic(a.lat, a.lon, b.lat, b.lon).dist <= SAME_SITE_KM;
-function mergeTwin(a, b) {
-  const kept = preferRecord(a, b), other = kept === a ? b : a;
+function mergeTwin(a, b, env) {
+  const kept = preferRecord(a, b, env), other = kept === a ? b : a;
   return !kept.aka && other.station !== kept.station ? { ...kept, aka: other.station } : kept;
 }
-function dedupActive(list) {
+function dedupActive(list, env) {
   const seen = new Map();
   for (const st of list) {
     const key = stationKey(st);
-    seen.set(key, seen.has(key) ? preferRecord(seen.get(key), st) : st);
+    seen.set(key, seen.has(key) ? preferRecord(seen.get(key), st, env) : st);
   }
   // Stejný kmitočet ze stejného vysílače ve stejnou chvíli = totéž vysílání pod jiným
   // názvem (HFCC provozovatel vs. AOKI program) – jinak by si samo strhávalo QRM.
   const out = [];
   for (const st of seen.values()) {
     const i = out.findIndex(o => o.freq === st.freq && sameSite(o, st));
-    if (i < 0) out.push(st); else out[i] = mergeTwin(out[i], st);
+    if (i < 0) out.push(st); else out[i] = mergeTwin(out[i], st, env);
   }
   return out;
 }
@@ -1360,17 +1384,19 @@ function scoreStation(st, env, activeNow) {
   // D. Výkon vysílače vycentrovaný na 100 kW (100 kW = 0; neslouží jako konstantní offset)
   const powerBonus = Math.round(Math.log10(Math.max(st.kw, 1) / SCORING.power.centerKw) * SCORING.power.mul);
   // E. ionosféra (SFI/Kp z NOAA) + denní D-absorpce = propagační člen (jeden slider)
-  const midSunlit = solarElevation((env.myLat + st.lat) / 2, (env.myLon + st.lon) / 2, env.now || new Date()) > 0;
-  const propAdj = propagationAdjust(f, bearing, SPACE_WX.sfi, SPACE_WX.kp, env.utcHour, midSunlit);
+  const daylight = pathDaylight(env.myLat, env.myLon, st.lat, st.lon, env.now || new Date());
+  const propAdj = propagationAdjust(f, bearing, SPACE_WX.sfi, SPACE_WX.kp, env.utcHour, daylight);
   const dayAbsorb = dayAbsorption(f, env.myLat, env.myLon, st.lat, st.lon, env.now || new Date());
 
   // D2. Skip-zóna + multi-hop útlum (nahrazuje starý lineární distPenalty)
   const skip = skipTerm(f, dist);
 
-  // F. Detekce sousedního a kanálového rušení (ACI / Co-Channel QRM)
-  const qrmPlus5 = activeNow.find(other => other !== st && other.freq === f + 5 && other.kw >= st.kw);
-  const qrmMinus5 = activeNow.find(other => other !== st && other.freq === f - 5 && other.kw >= st.kw);
-  const coChannel = activeNow.find(other => other !== st && other.freq === f && other.kw > st.kw);
+  // F. Detekce sousedního a kanálového rušení (ACI / Co-Channel QRM) – jen od rušitelů,
+  // kteří na QTH reálně dopadají silněji (louder). activeNow = null → skóre bez QRM.
+  const qrmNow = activeNow || [];
+  const qrmPlus5 = qrmNow.find(other => other !== st && other.freq === f + 5 && louder(other, st, env));
+  const qrmMinus5 = qrmNow.find(other => other !== st && other.freq === f - 5 && louder(other, st, env));
+  const coChannel = qrmNow.find(other => other !== st && other.freq === f && louder(other, st, env));
 
   let qrmPenalty = 0;
   const isLoop = env.ant === 'youloop';
@@ -1445,17 +1471,16 @@ function evaluateStations() {
 
   // Blacklist jen SKRÝVÁ (seznam, radar, časová okna) – v éteru skrytá stanice dál
   // vysílá, takže se počítá jako rušení (QRM) ostatním. activeAll ji proto obsahuje.
-  // Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech nejsilnější záznam,
+  // Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech záznam s nejlepším dopadem na QTH,
   // aby duplikáty nenafukovaly seznam ani nehlásily falešné krytí kanálu.
   // Dny vysílání (pole days, např. "12" = jen pondělí a úterý) se kontrolují PŘED
   // deduplikací: stanice, která dnes nevysílá, nesmí strhávat QRM ani vytlačit dnešní záznam.
   const dayNum = ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne
+  const env = { myLat, myLon, alt, balconyAz, rx, ant, weights: WEIGHTS, utcHour: now.getUTCHours(), now };
   const activeAll = dedupActive(SCHEDULE_DB.filter(st =>
-    isTimeActive(st.start, st.end, utcMinutes) && passesDay(st, dayNum)));
+    isTimeActive(st.start, st.end, utcMinutes) && passesDay(st, dayNum)), env);
 
   const results = [];
-
-  const env = { myLat, myLon, alt, balconyAz, rx, ant, weights: WEIGHTS, utcHour: now.getUTCHours(), now };
 
   for (const st of activeAll) {
     if (isBlacklisted(st)) continue; // skrytá, ale QRM z ní platí (je v activeAll)
@@ -1568,13 +1593,13 @@ function renderUpcoming(activeAll, utcMinutes, env, dayNum) {
     if (isBlacklisted(st)) continue;
     if (!isTimeActive(st.start, st.end, utcMinutes)) continue;
     if (!passesToday(st)) continue;
-    const stronger = activeAll.find(o => o !== st && o.freq === st.freq && o.kw > st.kw);
+    const stronger = activeAll.find(o => o !== st && o.freq === st.freq && louder(o, st, env));
     if (!stronger) continue;
     if (stationKey(stronger) === stationKey(st)) continue; // duplikát téže stanice, ne rušitel
     const clearIn = minutesLeft(stronger, utcMinutes); // celodenní rušitel = Infinity, nevypne
     if (!soon(clearIn)) continue;
     // šance až po vyčištění kanálu: silnější rušitelé už nevysílají
-    const cleaned = activeAll.filter(o => !(o !== st && o.freq === st.freq && o.kw > st.kw));
+    const cleaned = activeAll.filter(o => !(o !== st && o.freq === st.freq && louder(o, st, env)));
     push(st, clearIn, '🔓', tr('win_clear', { end: stronger.end, st: stronger.station }), cleaned);
   }
   // b) ▶ Stanice, které právě teď nejdou, ale startují v příští hodině.
