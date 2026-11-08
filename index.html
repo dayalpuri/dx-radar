@@ -441,6 +441,10 @@
     .stream-item a { color: var(--cyan); text-decoration: none; }
     .stream-play { font-size: 11px; padding: 3px 7px; cursor: pointer;
       background: var(--inset); color: var(--cyan); border: 1px solid var(--cyan); border-radius: 3px; }
+    .stream-url { display: flex; gap: 6px; align-items: center; width: 100%; margin: 2px 0 2px; }
+    .stream-url input { flex: 1; min-width: 0; font-size: 11px; font-family: monospace;
+      padding: 3px 6px; background: var(--inset); color: var(--muted);
+      border: 1px solid var(--border); border-radius: 3px; }
 
     /* Modální panel deníku */
     .log-panel {
@@ -818,6 +822,7 @@ const I18N = {
     stream_loose: "⚠ Přesnou shodu nelze najít, tohle jsou jen podobné stanice (posuzuj sluchem):",
     stream_none: "❓ V databázi radio-browser.info nenalezeno nic přehratelného.",
     stream_search: "🔎 Vyhledat web stanice ručně", stream_play: "▶ Přehrát",
+    stream_copy: "📋 URL", stream_copied: "URL streamu zkopírována do schránky",
     stream_searching: "⏳ Vyhledávám webové streamy…",
     sync_loading_repo: "⏳ Načítám data z repozitáře…", sync_dl: "⏳ Stahuji {src} {season}…",
     sync_done: "Staženo {n} záznamů: {src} ({date})", sync_fail: "Online stažení se nepovedlo.",
@@ -892,6 +897,7 @@ const I18N = {
     stream_loose: "⚠ No exact match; these are just similar stations (judge by ear):",
     stream_none: "❓ Nothing playable found in radio-browser.info.",
     stream_search: "🔎 Search the station's website", stream_play: "▶ Play",
+    stream_copy: "📋 URL", stream_copied: "Stream URL copied to clipboard",
     stream_searching: "⏳ Searching web streams…",
     sync_loading_repo: "⏳ Loading data from repo…", sync_dl: "⏳ Downloading {src} {season}…",
     sync_done: "Downloaded {n} records: {src} ({date})", sync_fail: "Online download failed.",
@@ -1902,6 +1908,10 @@ async function toggleStreamBox(cid) {
         <button class="stream-play" onclick="playStream('${cid}', ${i})">${tr('stream_play')}</button>
       </div>
       <audio id="audio-${cid}-${i}" controls style="width:100%; display:none;" preload="none"></audio>
+      <div class="stream-url">
+        <input type="text" readonly value="${escapeHtml(m.st.url_resolved)}" onclick="this.select()" title="${escapeHtml(m.st.url_resolved)}">
+        <button class="stream-play" onclick="copyStream('${cid}', ${i})">${tr('stream_copy')}</button>
+      </div>
     `;}).join('') +
     `<div class="stream-item" style="border:none; padding-top:6px;">
        <a href="${google}" target="_blank" rel="noopener" style="color:var(--cyan)">${tr('stream_search')}</a>
@@ -1915,6 +1925,25 @@ function anyStreamPlaying() {
   const boxOpen = [...document.querySelectorAll('.stream-box')]
     .some(b => b.style.display !== 'none' && b.querySelector('audio'));
   return audioBusy || boxOpen;
+}
+
+// Toast s vlastní zprávou (po zhasnutí vrátí původní text, ať „Zkopírováno (MD)" zůstane)
+function flashToast(msg) {
+  const t = document.getElementById('toast');
+  const prev = t.textContent;
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; t.textContent = prev; }, 2500);
+}
+
+// Kopírování URL streamu (pro externí přehrávač internetových rádií)
+function copyStream(cid, idx) {
+  const res = streamCache.get(cid);
+  if (!Array.isArray(res) || !res[idx]) return;
+  const url = res[idx].st.url_resolved;
+  navigator.clipboard.writeText(url)
+    .then(() => flashToast(tr('stream_copied')))
+    .catch(() => window.prompt(tr('clip_blocked_file'), url));
 }
 
 function playStream(cid, idx) {

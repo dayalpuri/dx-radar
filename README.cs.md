@@ -2,11 +2,17 @@
 
 *[English](README.md) · Česky*
 
-**Co právě teď chytíš na krátkých vlnách?** DX Radar je pomocník pro posluchače
-krátkovlnného rozhlasu (SWL). Vezme aktuální seznam vysílání, tvoji polohu a čas
-a seřadí stanice podle toho, jak reálná je jejich slyšitelnost — abys neztrácel čas
-laděním stanic, které k tobě stejně nedoletí. Výsledek ukáže jako skóre i jako
-polární radar kolem tvé pozice.
+**Co právě teď chytíš na krátkých vlnách — a co jsi to vlastně naladil?**
+DX Radar je pomocník pro posluchače krátkovlnného rozhlasu (SWL). Vezme aktuální
+seznam vysílání, tvoji polohu a čas a seřadí stanice podle toho, jak reálná je jejich
+slyšitelnost. Pomůže to v obou směrech:
+
+- **Plánování:** neztrácíš čas laděním stanic, které k tobě stejně nedoletí.
+- **Identifikace:** naladil jsi něco a nevíš co — na té frekvenci vysílá víc stanic
+  někde ve světě a skóre ti seřadí nejpravděpodobnějšího kandidáta pro tvoji polohu
+  a čas. Ověření 🎧 streamem to pak může potvrdit sluchem.
+
+Výsledek ukáže jako skóre i jako polární radar kolem tvé pozice.
 
 Skóre počítá z věcí, které rozhodují o příjmu:
 

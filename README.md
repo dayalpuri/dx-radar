@@ -2,11 +2,18 @@
 
 *English · [Česky](README.cs.md)*
 
-**What can you actually hear on shortwave right now?** DX Radar is a helper for
-shortwave listeners (SWL). It takes the current broadcast schedule, your location
-and the time, and ranks stations by how realistic their reception is — so you don't
-waste time tuning to stations that won't reach you anyway. Results are shown as a
-score and as a polar radar around your position.
+**What can you actually hear on shortwave right now — and what did you just tune into?**
+DX Radar is a helper for shortwave listeners (SWL). It takes the current broadcast
+schedule, your location and the time, and ranks stations by how realistic their
+reception is. That helps in both directions:
+
+- **Planning:** don't waste time tuning to stations that won't reach you anyway.
+- **Identifying:** you tuned something in but don't know what it is — several
+  stations transmit on that frequency somewhere in the world, and the score ranks
+  the most likely candidate for your location and time. The 🎧 stream check can then
+  confirm it by ear.
+
+Results are shown as a score and as a polar radar around your position.
 
 The score is computed from the things that actually drive reception:
 
