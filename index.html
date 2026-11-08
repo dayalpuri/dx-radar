@@ -1255,13 +1255,28 @@ function preferRecord(a, b) {
   if (!!a.approxLoc !== !!b.approxLoc) return a.approxLoc ? b : a;
   return b.kw > a.kw ? b : a;
 }
+// Stejné vysílací místo (do 10 km) – jen přesné polohy, ne EiBi centroid země
+const SAME_SITE_KM = 10;
+const sameSite = (a, b) => !a.approxLoc && !b.approxLoc &&
+  calcGeodesic(a.lat, a.lon, b.lat, b.lon).dist <= SAME_SITE_KM;
+function mergeTwin(a, b) {
+  const kept = preferRecord(a, b), other = kept === a ? b : a;
+  return !kept.aka && other.station !== kept.station ? { ...kept, aka: other.station } : kept;
+}
 function dedupActive(list) {
   const seen = new Map();
   for (const st of list) {
     const key = stationKey(st);
     seen.set(key, seen.has(key) ? preferRecord(seen.get(key), st) : st);
   }
-  return [...seen.values()];
+  // Stejný kmitočet ze stejného vysílače ve stejnou chvíli = totéž vysílání pod jiným
+  // názvem (HFCC provozovatel vs. AOKI program) – jinak by si samo strhávalo QRM.
+  const out = [];
+  for (const st of seen.values()) {
+    const i = out.findIndex(o => o.freq === st.freq && sameSite(o, st));
+    if (i < 0) out.push(st); else out[i] = mergeTwin(out[i], st);
+  }
+  return out;
 }
 
 // Celodenní vysílání (00:00–24:00, 00:00–23:59, start == konec) nikdy „nekončí".
@@ -1482,7 +1497,7 @@ function evaluateStations() {
         ${r.minsLeft <= 60 ? `<span class="ends-soon">${tr('card_ends', { n: r.minsLeft })}</span>` : ''}
         <span class="score-badge">${tr('lbl_score')}: <strong class="${scoreClass(r.score)}">${r.score}</strong> | ${tr('lbl_azimut')}: <strong>${r.bearing}° (${compassDir(r.bearing)})</strong></span>
       </div>
-      <div class="st-title">${escapeHtml(r.station)} (${escapeHtml(r.country)}) — ${escapeHtml(r.lang)}</div>
+      <div class="st-title">${escapeHtml(r.station)}${r.aka ? ` · ${escapeHtml(r.aka)}` : ''} (${escapeHtml(r.country)}) — ${escapeHtml(r.lang)}</div>
       <div class="st-meta">
         <div>${tr('card_tx')}: <span>${escapeHtml(r.site)} (${r.kw} kW)</span></div>
         <div>${tr('card_dist')}: <span${r.approxLoc ? ` title="${tr('approx_loc')}"` : ''}>${r.approxLoc ? '≈ ' : ''}${r.dist.toLocaleString(LANG === 'cs' ? 'cs-CZ' : 'en-US')} km</span></div>
@@ -1515,10 +1530,13 @@ function evaluateStations() {
   renderUpcoming(activeAll, utcMinutes, env, dayNum);
   // radar: sektorové počty ze všech aktivních (blacklist už odfiltrován), tečky top cílů
   filtered.forEach(r => { r.isTop = r.score >= SCORE_HI; });
-  const activeWithBearing = activeAll.map(st => ({
-    ...st, __bearing: calcGeodesic(myLat, myLon, st.lat, st.lon).bearing
-  }));
-  drawRadar(filtered, balconyAz, activeWithBearing);
+  // výseče respektují filtr pásem (jinak by čísla neodpovídala zobrazenému seznamu)
+  const activeWithBearing = activeAll
+    .filter(st => activeBand === 'all' || bandKey(st.freq) === activeBand)
+    .map(st => ({ ...st, __bearing: calcGeodesic(myLat, myLon, st.lat, st.lon).bearing }));
+  // tečky = TOP cíle dle skóre bez ohledu na zvolené řazení seznamu
+  const topByScore = [...filtered].sort((a, b) => b.score - a.score || a.freq - b.freq);
+  drawRadar(topByScore, balconyAz, activeWithBearing);
 }
 
 // 6. ČASOVÁ OKNA (příští hodina) - budoucí události jako tabulka:
@@ -2372,7 +2390,9 @@ evaluateStations();
 autoLoadSchedule();             // async - dotáhne plnou DB EiBi, pokud existuje
 // Auto-refresh každých 30 s, ale NE když hraje webový stream (jinak by se
 // přepsal seznam a přehrávač by zmizel). Po zastavení/zavření se obnoví sám.
-setInterval(() => { if (!anyStreamPlaying()) evaluateStations(); }, 30000);
+// Nepřekreslovat, když běží stream nebo je otevřený formulář deníku (smazal by rozepsaný zápis)
+const logFormOpen = () => [...document.querySelectorAll('.log-form')].some(f => f.style.display !== 'none');
+setInterval(() => { if (!anyStreamPlaying() && !logFormOpen()) evaluateStations(); }, 30000);
 
 // Service Worker: po první návštěvě přes https funguje PWA i offline (letadlový režim).
 // Po vydání nové verze: SW se na pozadí updatuje a tato stránka se sama reloadne

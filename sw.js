@@ -1,5 +1,5 @@
 // Service Worker DX Radar Pro - po první návštěvě funguje i offline (letadlový režim na balkoně)
-const CACHE = 'dx-radar-v41';
+const CACHE = 'dx-radar-v42';
 const ASSETS = ['./', './index.html', './scoring.js', './legal.html', './LICENSE', './manifest.webmanifest', './icon-192.png', './icon-512.png', './schedule.json', './schedule_eibi.json'];
 
 self.addEventListener('install', event => {
@@ -21,14 +21,15 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return; // NOAA API necháme online
-  // NOAA telemetrii vždy ber čerstvou z webu (network-first), zbytek z cache
-  if (url.hostname.startsWith('services.swpc.noaa.gov')) return;
+  // Cizí originy (NOAA telemetrie, streamy) SW neřeší - jdou vždy čerstvě ze sítě
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
   // Rozvrhy (schedule*.json/meta) = network-first: aby se k nainstalované PWA dostal
   // čerstvý auto-sync z GitHubu (cron). Offline fallback = poslední z cache.
   if (/\/schedule(_eibi)?\.(json|meta\.json)$/.test(url.pathname)) {
     event.respondWith(
       fetch(event.request).then(resp => {
+        // chybová odpověď (404/500) nesmí přepsat funkční offline rozvrh v cache
+        if (!resp.ok) return caches.match(event.request).then(c => c || resp);
         const copy = resp.clone();
         caches.open(CACHE).then(c => c.put(event.request, copy)).catch(() => {});
         return resp;

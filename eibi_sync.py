@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 
 EIBI_BASE = "http://eibispace.de/dx/"
 # Zimní sezóna (B) platí od poslední říjnové neděle do poslední březnové neděle.
-SEASON_FILES = {"b": "sked-b26.csv", "a": "sked-a26.csv"}
+# Kódy sezón (a26, b26, a27...) se počítají z data - viz season_code().
 DEFAULT_OUT_JSON = "schedule.json"
 
 # ---------------------------------------------------------------------------
@@ -343,12 +343,29 @@ def prefer_record(a, b):
     return b if b.get("kw", 0) > a.get("kw", 0) else a
 
 
+def _merge_twin(a, b):
+    kept = prefer_record(a, b)
+    other = b if kept is a else a
+    if not kept.get("aka") and other.get("station") != kept.get("station"):
+        kept = {**kept, "aka": other.get("station")}
+    return kept
+
+
 def dedup_active(records):
+    """Jako PWA dedupActive(): stejná stanice (station_key), pak stejný kmitočet ze
+    stejného vysílače ve stejnou chvíli = totéž vysílání pod jiným názvem."""
     dedup = {}
     for st in records:
         k = station_key(st)
         dedup[k] = prefer_record(dedup[k], st) if k in dedup else st
-    return list(dedup.values())
+    out = []
+    for st in dedup.values():
+        i = next((i for i, o in enumerate(out) if o["freq"] == st["freq"] and _same_site(o, st)), None)
+        if i is None:
+            out.append(st)
+        else:
+            out[i] = _merge_twin(out[i], st)
+    return out
 
 
 # Běžné zkratky v názvech stanic: EiBi píše "R.ROMANIA INT.",
@@ -375,9 +392,9 @@ def station_key(st):
 # ---------------------------------------------------------------------------
 # 1) HARVESTER: EiBi CSV -> JSON pro PWA
 # ---------------------------------------------------------------------------
-def current_season():
+def current_season(now=None):
     """B sezóna (zimní) = konec října až konec března."""
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     if now.month in (11, 12, 1, 2):
         return "b"
     if now.month == 10 and now.day >= 25:
@@ -387,11 +404,30 @@ def current_season():
     return "a"
 
 
+def season_code(now=None):
+    """Kód aktuální sezóny ITU/HFCC: 'a26' = léto 2026, 'b26' = zima 2026/27
+    (v lednu-březnu 2027 tedy pořád 'b26')."""
+    now = now or datetime.now(timezone.utc)
+    yy = now.year % 100
+    if current_season(now) == "b" and now.month <= 3:
+        yy -= 1
+    return f"{current_season(now)}{yy:02d}"
+
+
+def previous_season(code):
+    """b26 -> a26, a27 -> b26 (záloha, když nová sezóna ještě není publikovaná)."""
+    yy = int(code[1:])
+    return f"a{yy:02d}" if code[0] == "b" else f"b{(yy - 1) % 100:02d}"
+
+
+def season_candidates(preferred=None):
+    preferred = preferred or season_code()
+    return [preferred, previous_season(preferred)]
+
+
 def download_eibi(csv_path):
-    """Stáhne aktuální sked z eibispace.de. Zkusí B sezónu, pak A (fallback)."""
-    candidates = [SEASON_FILES["b"], SEASON_FILES["a"]] if current_season() == "b" \
-        else [SEASON_FILES["a"], SEASON_FILES["b"]]
-    for fname in candidates:
+    """Stáhne aktuální sked z eibispace.de. Zkusí aktuální sezónu, pak předchozí."""
+    for fname in (f"sked-{s}.csv" for s in season_candidates()):
         url = EIBI_BASE + fname
         try:
             print(f"[*] Stahuji {url} ...")
@@ -492,6 +528,7 @@ def parse_eibi_csv(csv_path):
                 "kw": 500 if is_china else 100,
                 "isChina": is_china,
                 "days": parse_eibi_days(row[2]),
+                "approxLoc": True,  # poloha = centroid země, ne přesný vysílač
             })
     if skipped:
         top = ", ".join(f"{k or '?'}:{v}" for k, v in sorted(skipped.items(), key=lambda kv: -kv[1]))
@@ -648,9 +685,9 @@ def parse_hfcc_schedule(text, sites, brc, langs):
 
 
 def sync_hfcc(preferred_season):
-    """Stáhne HFCC rozvrh - zkusí preferovanou sezónu, pak tu druhou."""
-    seasons = [preferred_season] + [s for s in ("b26", "a26") if s != preferred_season]
-    for season in seasons:
+    """Stáhne HFCC rozvrh - zkusí preferovanou sezónu, pak předchozí.
+    Vrací (záznamy, skutečně stažená sezóna)."""
+    for season in season_candidates(preferred_season):
         try:
             files = hfcc_files(season)
             print(f"[*] Stahuji HFCC {season.upper()} ...")
@@ -662,10 +699,10 @@ def sync_hfcc(preferred_season):
             if records:
                 print(f"[+] HFCC {season.upper()}: {len(records)} oken, "
                       f"{len(sites)} vysílacích míst")
-                return records
+                return records, season
         except Exception as exc:
             print(f"[!] HFCC {season} nedostupné ({exc}).")
-    return []
+    return [], None
 
 
 # ---------------------------------------------------------------------------
@@ -675,10 +712,7 @@ def sync_hfcc(preferred_season):
 #      Nejlepší jména stanic, přesné souřadnice vysílačů (DDMMSS), výkony,
 #      azimuty i dny vysílání; distribuce jako zip se Shift-JIS textem.
 # ---------------------------------------------------------------------------
-AOKI_ZIP_URLS = {
-    "b26": "https://www1.m2.mediacat.ne.jp/binews/us/xz/xzb26.zip",
-    "a26": "https://www1.m2.mediacat.ne.jp/binews/us/xz/xza26.zip",
-}
+AOKI_ZIP_URL = "https://www1.m2.mediacat.ne.jp/binews/us/xz/xz{season}.zip"
 
 
 def download_bytes(url):
@@ -777,14 +811,13 @@ def parse_aoki_txt(text):
 
 
 def sync_aoki(preferred_season):
-    """Stáhne AOKI zip (sezóna b26/a26), rozbalí hlavní txt a zparsuje."""
+    """Stáhne AOKI zip (aktuální sezóna, pak předchozí), rozbalí hlavní txt a zparsuje."""
     import io
     import zipfile
-    seasons = [preferred_season] + [s for s in ("b26", "a26") if s != preferred_season]
-    for season in seasons:
+    for season in season_candidates(preferred_season):
         try:
             print(f"[*] Stahuji AOKI {season.upper()} ...")
-            zf = zipfile.ZipFile(io.BytesIO(download_bytes(AOKI_ZIP_URLS[season])))
+            zf = zipfile.ZipFile(io.BytesIO(download_bytes(AOKI_ZIP_URL.format(season=season))))
             # hlavní seznam: člen 'xz*.txt' (ne userlist1.txt s utility stanicemi)
             member = next((n for n in zf.namelist()
                             if n.lower().startswith("xz") and n.lower().endswith(".txt")), None)
@@ -834,23 +867,42 @@ def same_station(a, b):
     return long_[:len(short)] == short and not set(short) <= _GENERIC_WORDS
 
 
-def is_cross_source_dup(r, index):
-    """Je r jen jiný zápis vysílání, které už je v indexu z prioritnějšího zdroje?
-    Stejný kmitočet + stejná stanice (same_station) + překryv času i dnů.
-    Různé stanice na stejném kmitočtu a čase se NIKDY neslučují."""
-    for o in index.get(r["freq"], ()):
-        if (same_station(r.get("station"), o.get("station"))
-                and _days_overlap(r.get("days", ""), o.get("days", ""))
-                and _minute_set(r["start"], r["end"]) & _minute_set(o["start"], o["end"])):
-            return True
-    return False
+SAME_SITE_KM = 10
+
+
+def _same_site(a, b):
+    """Stejné vysílací místo (do SAME_SITE_KM) - jen u přesných poloh, ne EiBi centroidů."""
+    if a.get("approxLoc") or b.get("approxLoc"):
+        return False
+    return calc_geodesic(a["lat"], a["lon"], b["lat"], b["lon"])[0] <= SAME_SITE_KM
+
+
+def _days_cover(o, r):
+    """Pokrývají dny vysílání o všechny dny r? (prázdné = denně)"""
+    od, rd = o.get("days", ""), r.get("days", "")
+    return not od or (bool(rd) and set(rd) <= set(od))
+
+
+def find_cross_source_dup(r, index):
+    """Záznam z prioritnějšího zdroje, který je totéž vysílání jako r, jinak None.
+    Totéž vysílání = stejný kmitočet + (stejná stanice NEBO stejný vysílač: dva různé
+    programy nemůžou jít v tutéž chvíli na stejném kmitočtu z jednoho místa - HFCC
+    uvádí provozovatele, AOKI program). r se vyřadí, jen když ho takové záznamy
+    pokrývají CELÝ (čas i dny) - jinak by zmizel vysílací čas, který prioritnější
+    zdroj nemá. Různé stanice z různých vysílačů se NIKDY neslučují."""
+    need = _minute_set(r["start"], r["end"])
+    matches = [o for o in index.get(r["freq"], ())
+               if _days_cover(o, r) and need & _minute_set(o["start"], o["end"])
+               and (same_station(r.get("station"), o.get("station")) or _same_site(r, o))]
+    covered = set().union(*(_minute_set(o["start"], o["end"]) for o in matches))
+    return matches[0] if matches and need <= covered else None
 
 
 def merge_schedules(*record_lists, stats=None):
     """Sloučení seznamů v pořadí priorit: HFCC > AOKI > EiBi.
 
     - uvnitř jednoho zdroje se zahodí jen úplně shodné záznamy,
-    - mezi zdroji jen totéž vysílání (is_cross_source_dup),
+    - mezi zdroji jen totéž vysílání (find_cross_source_dup),
     takže všechny různé stanice na jednom kmitočtu v datech zůstanou."""
     merged = []
     index = {}  # freq -> záznamy z dřívějších (prioritnějších) zdrojů
@@ -866,8 +918,12 @@ def merge_schedules(*record_lists, stats=None):
                 stats["exact"] += 1
                 continue
             seen_exact.add(exact)
-            if is_cross_source_dup(r, index):
+            dup = find_cross_source_dup(r, index)
+            if dup is not None:
                 stats["cross"] += 1
+                # jiný název téhož vysílání (typicky AOKI program k HFCC provozovateli)
+                if "aka" not in dup and not same_station(r.get("station"), dup.get("station")):
+                    dup["aka"] = r["station"]
                 continue
             merged.append(r)
             added.append(r)
@@ -876,13 +932,13 @@ def merge_schedules(*record_lists, stats=None):
     return merged
 
 
-def save_json(records, out_json, sources=None):
+def save_json(records, out_json, sources=None, season=None):
     with open(out_json, "w", encoding="utf-8") as out:
         json.dump(records, out, ensure_ascii=False)
     # metadata vedle dat: PWA podle ní pozná zdroje a hlavně sezónu
     # (aby si nepřemíchávala starou sezónu z repa s čerstvou online)
     meta = {
-        "season": "b26" if current_season() == "b" else "a26",
+        "season": season or season_code(),
         "generated": datetime.now(timezone.utc).isoformat(),
         "count": len(records),
         "sources": sorted(sources or []),
@@ -1115,7 +1171,7 @@ def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
 
 
 def collect_time_windows(db, active_all, now_minutes, blacklist, qth, rx, ant,
-                         sfi, kp, max_min=60):
+                         sfi, kp, max_min=60, min_score=0):
     """⏱ Časová okna: jen budoucí události, které zatím neslyšíš -
     startující stanice (▶) a kanály, kde silný rušitel brzy vypne (🔓).
     ŠANCE se počítá proti budoucímu stavu éteru (po startu / po vypnutí
@@ -1130,8 +1186,10 @@ def collect_time_windows(db, active_all, now_minutes, blacklist, qth, rx, ant,
         k = station_key(st)
         if k in seen:
             return
-        seen.add(k)
         sc = _score_one(st, qth, rx, ant, active_now, sfi, kp)
+        if sc["score"] < min_score:  # jako PWA: min. skóre platí i pro okna
+            return
+        seen.add(k)
         items.append({"t": t, "typ": typ, "freq": st["freq"], "station": st["station"],
                       "kw": st.get("kw", 0), "score": sc["score"], "info": info})
 
@@ -1262,6 +1320,8 @@ def main():
     ap.add_argument("--eibi", action="store_true",
                     help="přidat EiBi doplněk (schedule_eibi.json, hrubá poloha) jako přepínač „+ EiBi“ v PWA")
     ap.add_argument("--limit", type=int, default=12, help="počet cílů ve výpisu (default 12)")
+    ap.add_argument("--min-score", type=int, default=None,
+                    help="min. skóre pro časová okna (default jako PWA: hranice Slyšitelné ze scoring.js)")
     ap.add_argument("--sort", default="freq", choices=["freq", "score"],
                     help="řazení cílů: freq = dle kmitočtu (default), score = dle šance")
     ap.add_argument("--chance", default="top", choices=["all", "top", "mid", "low"],
@@ -1312,15 +1372,15 @@ def main():
             chance_label = "vše"
         windows = collect_time_windows(db, active, now_minutes,
                                        blacklist=blacklist, qth=qth,
-                                       rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp)
+                                       rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp,
+                                       min_score=mid if args.min_score is None else args.min_score)
         print(f"[i] Zdroj dat: {source} ({len(db)} záznamů)")
         print_radar(shown, windows, qth, args.rx, args.ant, now_minutes,
                     args.limit, args.sort, chance_label)
         return 0
 
     # default: --sync (harvest: HFCC + AOKI + EiBi podle --source)
-    season = current_season()
-    preferred = "b26" if season == "b" else "a26"
+    preferred = season_code()
 
     sources = args.source if args.source != "all" else ["hfcc", "aoki", "eibi"]
     merged = []
@@ -1328,15 +1388,24 @@ def main():
     merge_stats = {}
 
     if "hfcc" in sources and not args.offline:
-        hfcc_records = sync_hfcc(preferred)
+        hfcc_records, hfcc_season = sync_hfcc(preferred)
         if hfcc_records:
-            merged = merge_schedules(merged, hfcc_records, stats=merge_stats)
-            got_season["hfcc"] = preferred
+            got_season["hfcc"] = hfcc_season
     if "aoki" in sources and not args.offline:
         aoki_records, aoki_season = sync_aoki(preferred)
         if aoki_records:
-            merged = merge_schedules(merged, aoki_records, stats=merge_stats)
             got_season["aoki"] = aoki_season
+    # Nemíchat sezóny: když jeden zdroj už má aktuální a druhý jen předchozí,
+    # předchozí vynech (rozvrhy se mezi sezónami výrazně liší).
+    if len(set(got_season.values())) > 1:
+        for src in [s for s, ssn in got_season.items() if ssn != preferred]:
+            print(f"[!] {src.upper()} má jen sezónu {got_season.pop(src).upper()} "
+                  f"(ostatní {preferred.upper()}) - vynechávám, ať se sezóny nemíchají.")
+    if "hfcc" in got_season:
+        merged = merge_schedules(merged, hfcc_records, stats=merge_stats)
+    if "aoki" in got_season:
+        merged = merge_schedules(merged, aoki_records, stats=merge_stats)
+    main_season = next(iter(got_season.values()), None)
     # EiBi se do schedule.json NEMERGUJE (jen country-centroid souřadnice by kazily skóre).
     # Místo toho jde do samostatného schedule_eibi.json jako volitelný doplněk pro PWA:
     # stanice mimo HFCC/AOKI, označené approxLoc (hrubá poloha). Appka ho přimerguje
@@ -1352,22 +1421,19 @@ def main():
                 csv_path, eibi_season = download_eibi("sked_eibi.csv")
         if csv_path:
             # download_eibi vrací název souboru (např. "sked-b26.csv") -> normalizuj na sezónu
-            tag = str(eibi_season or csv_path or "")
-            eibi_season = "b26" if "b26" in tag else ("a26" if "a26" in tag else None)
+            m = re.search(r"([ab]\d\d)", str(eibi_season or csv_path or ""))
+            eibi_season = m.group(1) if m else None
             eibi_records = parse_eibi_csv(csv_path)
-            fresh = any(s == preferred for s in got_season.values())
-            if eibi_records and eibi_season and eibi_season != preferred and fresh:
-                print(f"[i] EiBi ({eibi_season}) doplněk přeskočen - stará sezóna vs {preferred.upper()}.")
+            if eibi_records and eibi_season and main_season and eibi_season != main_season:
+                print(f"[i] EiBi ({eibi_season}) doplněk přeskočen - jiná sezóna než "
+                      f"HFCC/AOKI ({main_season.upper()}).")
             elif eibi_records:
                 # Doplněk = jen vysílání, která HFCC/AOKI nemá (stejná stanice v jiném
                 # čase/dnech zůstává); různé stanice na stejném kmitočtu se nezahazují.
-                for r in merge_schedules(merged, eibi_records)[len(merged):]:
-                    r2 = dict(r)
-                    r2["approxLoc"] = True  # EiBi: poloha = centroid země, ne přesný vysílač
-                    eibi_extra.append(r2)
+                eibi_extra = merge_schedules(merged, eibi_records)[len(merged):]
                 print(f"[i] EiBi doplněk: {len(eibi_extra)} stanic navíc mimo HFCC/AOKI (hrubá poloha).")
 
-    if not merged:
+    if not merged and not eibi_extra:
         print("[!] Žádná data k uložení.")
         return 1
     for src, ssn in got_season.items():
@@ -1375,9 +1441,11 @@ def main():
     if merge_stats:
         print(f"[i] Sloučení HFCC+AOKI: {merge_stats['exact']} úplně shodných, "
               f"{merge_stats['cross']} totožných vysílání napříč zdroji vynecháno.")
-    save_json(merged, args.out, sources=list(got_season.keys()))
+    if merged:
+        save_json(merged, args.out, sources=list(got_season.keys()), season=main_season)
     if eibi_extra:
-        save_json(eibi_extra, "schedule_eibi.json", sources=["eibi"])
+        save_json(eibi_extra, "schedule_eibi.json", sources=["eibi"],
+                  season=eibi_season or main_season)
     return 0
 
 
