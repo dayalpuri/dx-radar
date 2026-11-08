@@ -1280,7 +1280,9 @@ function scoreStation(st, env, activeNow) {
   // C. Profil antény × pásmo (prut 60cm / 7m drát na cívce / pasivní YouLoop)
   let antennaBonus = 0;
   if (env.ant === 'whip') {
-    antennaBonus = f < 5000 ? -18 : f < 9000 ? -6 : f < 15000 ? 10 : 4;
+    // Prut je elektricky delší (účinnější) s rostoucí frekvencí, proto ≥15 MHz
+    // nemá dostávat menší bonus než 9–15 MHz; ranní high-band data to potvrdila.
+    antennaBonus = f < 5000 ? -18 : f < 9000 ? -6 : f < 15000 ? 10 : 6;
   } else if (env.ant === 'wire') {               // širokopásmový zisk, nejvíc dole/středně
     antennaBonus = f < 5000 ? 8 : f < 10000 ? 12 : f < 18000 ? 4 : 0;
   } else if (env.ant === 'youloop') {            // pasivní, bez zisku – citlivý null na QRM
