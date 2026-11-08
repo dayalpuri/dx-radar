@@ -84,22 +84,21 @@ Pages, where it runs over `https://` and everything works:
 4. After the first visit it also works **offline** (service worker) — in airplane
    mode the GPS entry and bundled data are enough.
 
-## Updating the schedule data (2 ways)
+## Updating the schedule data
 
-**A) Directly in the PWA (no Python):** the **⬇️ Download schedule** button fetches
-the current season in the browser — HFCC first (`B26all00.TXT` + `site.txt` +
-`broadcas.txt`: exact coordinates, power, azimuths and days), falling back to the
-EiBi CSV if HFCC fails. Neither server sends CORS headers, so a Jina-reader proxy
-is used as a fallback. Data is saved to `localStorage` and survives restarts and
-airplane mode. On failure the app shows instructions for the manual 📂 import route
-(the PWA reads `.csv` and `.json`).
+The data is refreshed **automatically on GitHub**: a daily Actions cron
+(`.github/workflows/sync-schedules.yml`) runs `python3 eibi_sync.py --sync`, which
+downloads HFCC + AOKI + EiBi locally in Python (no third-party proxy) and commits
+`schedule.json` (+ `schedule_eibi.json`) when anything changed. The repo — and, via
+the network-first service worker, the installed PWA — is therefore never more than
+~1 day stale. The app just loads `schedule.json` from the repo on startup; there is
+no in-browser download step and no dependency on any CORS proxy.
 
-**B) Via a laptop (classic):** `python3 eibi_sync.py --sync` merges HFCC + AOKI + EiBi
-and builds `schedule.json`, which you commit to the repo — the PWA uses it as the default
-database until the user downloads their own.
+To refresh manually (e.g. locally), run the same command:
 
-Source priority at startup: `localStorage` (last synced) → `schedule.json` in the repo →
-built-in sample.
+```bash
+python3 eibi_sync.py --sync
+```
 
 ## Sync devel → mobile (workflow)
 

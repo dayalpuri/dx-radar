@@ -82,21 +82,21 @@ kde běží na `https://` a vše funguje:
 4. Po první návštěvě funguje i **offline** (service worker) — v letadlovém režimu
    stačí zadaná poloha a vestavěná data.
 
-## Aktualizace dat rozvrhů (2 cesty)
+## Aktualizace dat rozvrhů
 
-**A) Přímo v PWA (bez Pythonu):** tlačítko **⬇️ Stáhnout rozvrh** stáhne aktuální
-sezónu v prohlížeči — nejprve HFCC (`B26all00.TXT` + `site.txt` + `broadcas.txt`:
-přesné souřadnice, výkony, azimuty a dny), po pádu HFCC EiBi CSV. Oba servery
-neposílají CORS hlavičky, proto se používá fallback přes Jina reader. Data se uloží
-do `localStorage` — přežijí restart i letadlový režim. Případný nezdar zobrazí
-instrukce k ruční cestě přes 📂 import (PWA umí `.csv` i `.json`).
+Data se obnovují **automaticky na GitHubu**: denní Actions cron
+(`.github/workflows/sync-schedules.yml`) spustí `python3 eibi_sync.py --sync`, který
+stáhne HFCC + AOKI + EiBi lokálně v Pythonu (bez 3rd-party proxy) a commitne
+`schedule.json` (+ `schedule_eibi.json`), když se něco změnilo. Repo — a přes
+network-first service worker i nainstalovaná PWA — je tak max ~den staré. Appka při
+startu jen načte `schedule.json` z repa; žádné stahování v prohlížeči ani závislost
+na CORS proxy.
 
-**B) Přes notebook (klasicky):** `python3 eibi_sync.py --sync` sloučí HFCC + AOKI + EiBi
-a vygeneruje `schedule.json`, který se commitne do repa — PWA ho použije jako výchozí
-databázi, dokud si uživatel nestáhne vlastní.
+Ruční obnova (např. lokálně) stejným příkazem:
 
-Priorita zdrojů při startu: `localStorage` (naposledy synchronizovaná) → `schedule.json`
-v repu → vestavěný vzorek.
+```bash
+python3 eibi_sync.py --sync
+```
 
 ## Fallback GPS na mobilu
 
