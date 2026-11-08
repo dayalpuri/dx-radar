@@ -18,6 +18,8 @@ Postaveno na konverzaci s Gemini (zima B26).
 | `manifest.webmanifest`| PWA manifest (ikona, „Přidat na plochu")                    |
 | `sw.js`               | Service worker — po první návštěvě jede i offline           |
 | `icon-192/512.png`    | Ikony aplikace                                              |
+| `legal.html`          | Licence, atribuce zdrojů dat a zásady soukromí (CZ/EN)      |
+| `LICENSE`             | MIT licence kódu (data vyňata — vlastní podmínky zdrojů)    |
 
 ## Zdroje dat (čím víc seznamů, tím líp)
 

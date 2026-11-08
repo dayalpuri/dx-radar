@@ -74,6 +74,9 @@
     <h2>3. Zdroje dat rozvrhů a jejich podmínky</h2>
     <p>Databáze vysílacích oken je sestavena ze tří veřejných seznamů krátkovlnných vysílačů.
     Data jsou zde šířena v dobré víře pro nekomerční účely a zůstávají majetkem svých tvůrců.</p>
+    <p class="muted">Pokud jste autorem či správcem některého ze zdrojových seznamů a nepřejete si, aby byla vaše
+    data součástí předkompilovaných souborů v tomto repozitáři, kontaktujte prosím provozovatele přes
+    <a href="https://github.com/dayalpuri/dx-radar/issues" rel="noopener">GitHub Issues</a> a data budou obratem odstraněna.</p>
 
     <h3>EiBi Shortwave Schedules</h3>
     <p>Autor <strong>Eike Bierwirth</strong> — <a href="http://eibispace.de/" rel="noopener">eibispace.de</a>.
@@ -123,8 +126,14 @@
       <tr><td>radio-browser.info</td><td>název stanice + IP</td><td>🎧 ověření streamu</td><td><a href="https://www.radio-browser.info/" rel="noopener">radio-browser</a></td></tr>
       <tr><td>Google</td><td>vyhledávací dotaz (název stanice)</td><td>odkaz „web stanice" (otevře nové okno)</td><td><a href="https://policies.google.com/privacy" rel="noopener">policies.google.com</a></td></tr>
     </table>
-    <p class="muted">Tyto služby si vybral provozovatel, proto je z pohledu GDPR „správcem" v rozsahu tohoto
-    nasměrování — i když odeslaná data nikdy nevidí ani neukládá. Pokud funkce nepoužijete, nic se neodešle.</p>
+    <p class="muted">Při spuštění samotného poslechu se navíc prohlížeč připojí přímo k audio serveru zvolené
+    rozhlasové stanice (předá se mu vaše IP adresa). Provozovatel neodpovídá za obsah ani autorská práva
+    cizích streamů.</p>
+    <p class="muted">Aplikace je provozována jako osobní nekomerční projekt. Protože však běží veřejně v prohlížeči
+    a volá výše uvedená externí API, uvádíme tyto informace pro plnou transparentnost (ve smyslu GDPR).
+    Provozovatel žádná z těchto dat nevidí, nezpracovává ani neukládá; při využití těchto funkcí komunikuje
+    váš prohlížeč přímo se servery daných služeb podle jejich vlastních zásad ochrany soukromí. Pokud funkce
+    nepoužijete, nic se neodešle.</p>
 
     <h3>Cookies a souhlas</h3>
     <p>Aplikace <strong>nepoužívá cookies</strong> ani sledovací technologie. <code>localStorage</code> slouží
@@ -136,8 +145,9 @@
 
     <h3>Právní základ, přenos do zahraničí a stížnost</h3>
     <ul>
-      <li><strong>Právní základ:</strong> výše uvedené přenosy proběhnou jen na váš pokyn (stisk tlačítka)
-      za účelem poskytnutí vámi vyžádané funkce.</li>
+      <li><strong>Právní základ:</strong> načtení kosmického počasí (NOAA) při startu a ostatní přenosy vyvolané
+      vaším pokynem (stiskem tlačítka) jsou nezbytné pro poskytnutí vámi vyžádaných funkcí aplikace
+      (čl. 6 odst. 1 písm. b) / f) GDPR).</li>
       <li><strong>Přenos mimo EU:</strong> některé služby jsou v USA (GitHub, NOAA, ipapi, Jina, Google),
       takže vaše IP/poloha může být zpracována mimo EU/EHP.</li>
       <li><strong>Dozorový úřad:</strong> máte právo podat stížnost u Úřadu pro ochranu osobních údajů (ÚOOÚ,
@@ -159,7 +169,7 @@
     It is a static web app (PWA) with no backend, hosted on GitHub Pages.</p>
     <ul>
       <li>The app was <strong>built with the help of artificial intelligence</strong> (Google Gemini and Anthropic Claude).</li>
-      <li>It is provided „<strong>as is</strong>", <strong>without any warranty</strong> of accuracy, completeness
+      <li>It is provided "<strong>as is</strong>", <strong>without any warranty</strong> of accuracy, completeness
       or availability. Scores and reception predictions are heuristic estimates, not facts.</li>
       <li>It is not intended for safety, emergency or professional use.</li>
       <li>The author is not liable for any damages arising from use of the app or its data.</li>
@@ -175,10 +185,13 @@
     <h2>3. Schedule data sources &amp; terms</h2>
     <p>The broadcast database is compiled from three public shortwave schedules, redistributed in good faith
     for non-commercial use; each remains the property of its compiler.</p>
+    <p class="muted">If you are the compiler or rights holder of any of the source schedules and wish for your data
+    to be removed from the pre-compiled files in this repository, please open a
+    <a href="https://github.com/dayalpuri/dx-radar/issues" rel="noopener">GitHub Issue</a> and it will be promptly removed.</p>
 
     <h3>EiBi Shortwave Schedules</h3>
     <p>By <strong>Eike Bierwirth</strong> — <a href="http://eibispace.de/" rel="noopener">eibispace.de</a>.
-    Per the author's README („Conditions of use"):</p>
+    Per the author's README ("Conditions of use"):</p>
     <div class="box">"All my frequency lists are free of cost, and any person is absolutely free to download,
     use, copy, or distribute these files or to use them within third-party software."</div>
     <p class="muted">i.e. free to use, including in third-party software. No warranty of accuracy is given.
@@ -223,9 +236,14 @@
       <tr><td>radio-browser.info</td><td>station name + IP</td><td>🎧 stream verification</td><td><a href="https://www.radio-browser.info/" rel="noopener">radio-browser</a></td></tr>
       <tr><td>Google</td><td>search query (station name)</td><td>"station web" link (opens new tab)</td><td><a href="https://policies.google.com/privacy" rel="noopener">policies.google.com</a></td></tr>
     </table>
-    <p class="muted">These services were chosen by the operator, who is therefore a GDPR "controller" to the extent
-    of this routing — even though the sent data is never seen or stored by the operator. If you do not use a feature,
-    nothing is sent.</p>
+    <p class="muted">When you actually play a stream, your browser also connects directly to the chosen broadcaster's
+    audio server (sharing your IP address). The operator is not responsible for the content or copyright of
+    third-party streams.</p>
+    <p class="muted">This app is operated as a personal, non-commercial project. However, because it is publicly
+    accessible and calls the external APIs listed above, this information is provided for full transparency under
+    the GDPR. The operator never sees, processes or stores any of this data; when you trigger these features, your
+    browser communicates directly with the respective third-party servers under their own privacy policies. If you
+    do not use a feature, nothing is sent.</p>
 
     <h3>Cookies and consent</h3>
     <p>The app uses <strong>no cookies</strong> or tracking technologies. <code>localStorage</code> holds only your
@@ -237,8 +255,8 @@
 
     <h3>Legal basis, international transfers and complaints</h3>
     <ul>
-      <li><strong>Legal basis:</strong> the transfers above happen only at your request (a button press) in order
-      to provide the feature you asked for.</li>
+      <li><strong>Legal basis:</strong> fetching space weather (NOAA) at startup and other transfers triggered by
+      your action (a button press) are necessary to provide the app features you requested (Art. 6(1)(b)/(f) GDPR).</li>
       <li><strong>Transfers outside the EU:</strong> some services are US-based (GitHub, NOAA, ipapi, Jina, Google),
       so your IP/location may be processed outside the EU/EEA.</li>
       <li><strong>Supervisory authority:</strong> you have the right to lodge a complaint with your data-protection

@@ -47,3 +47,8 @@ are compiled from third-party sources, each under its own terms:
 See legal.html for the full attribution, usage terms and privacy information.
 These data files are redistributed in good faith for non-commercial use; they
 remain the property of their respective compilers.
+
+If you are the compiler or rights holder of any source schedule and do not want
+your data included in the pre-compiled files in this repository, please open a
+GitHub Issue (https://github.com/dayalpuri/dx-radar/issues) and it will be
+promptly removed.
