@@ -798,6 +798,7 @@ const I18N = {
     tip_cover: "Silné krytí ({st} do {end} UTC). Čekej na vypnutí nosné!",
     tip_qrm_lsb: "QRM z {f} kHz ({st}) → LSB, BFO 00, BW 2.5 kHz!",
     tip_qrm_usb: "QRM z {f} kHz ({st}) → USB, BFO 00, BW 2.5 kHz!",
+    tip_qrm_both: "QRM z obou stran ({lo} i {hi} kHz) → zúži filtr na BW 2 kHz, případně sync AM!",
     tip_loop: "YouLoop: otoč smyčkou a zalaď null na rušič (figure-8).",
     tip_weak: "Slabší DX → připoj drát/loop, {rx} drž u zábradlí, zkus ECSS (USB/LSB, BW 2.5 kHz)",
     th_when: "KDY", th_freq: "FREQ", th_station: "STANICE", th_kw: "kW", th_score: "SKÓRE",
@@ -871,6 +872,7 @@ const I18N = {
     tip_cover: "Strong co-channel ({st} until {end} UTC). Wait for carrier off!",
     tip_qrm_lsb: "QRM from {f} kHz ({st}) → LSB, BFO 00, BW 2.5 kHz!",
     tip_qrm_usb: "QRM from {f} kHz ({st}) → USB, BFO 00, BW 2.5 kHz!",
+    tip_qrm_both: "QRM from both sides ({lo} and {hi} kHz) → narrow the filter to BW 2 kHz, or try sync AM!",
     tip_loop: "YouLoop: rotate the loop and null out the interferer (figure-8).",
     tip_weak: "Weak DX → add wire/loop, hold {rx} by the railing, try ECSS (USB/LSB, BW 2.5 kHz)",
     th_when: "WHEN", th_freq: "FREQ", th_station: "STATION", th_kw: "kW", th_score: "SCORE",
@@ -1070,7 +1072,8 @@ function blMatches(p, st) {
 }
 function isBlacklisted(st) {
   if (!BLACKLIST_ON || !BLACKLIST.length) return false;
-  return BLACKLIST.some(p => blMatches(p, st));
+  // i druhý název téhož vysílání (aka: HFCC provozovatel vs. AOKI program)
+  return BLACKLIST.some(p => blMatches(p, st) || (st.aka && blMatches(p, { station: st.aka })));
 }
 
 // 2. SFÉRICKÁ MATEMATIKA (Vzdálenost a Azimut ortodromy)
@@ -1379,11 +1382,16 @@ function scoreStation(st, env, activeNow) {
     qrmPenalty = SCORING.qrm.coChannel;
     qrmFlag = true;
     pl330Tip = tr('tip_cover', { st: coChannel.station, end: coChannel.end });
-  } else if (qrmPlus5 && !qrmMinus5) {
+  } else if (qrmPlus5 && qrmMinus5) {
+    // rušitel z obou stran: postranním pásmem (USB/LSB) se dá uhnout jen jednomu
+    qrmPenalty = SCORING.qrm.adjacentBoth;
+    qrmFlag = true;
+    pl330Tip = tr('tip_qrm_both', { lo: f - 5, hi: f + 5 });
+  } else if (qrmPlus5) {
     qrmPenalty = SCORING.qrm.adjacent;
     qrmFlag = true;
     pl330Tip = tr('tip_qrm_lsb', { f: f + 5, st: qrmPlus5.station });
-  } else if (qrmMinus5 && !qrmPlus5) {
+  } else if (qrmMinus5) {
     qrmPenalty = SCORING.qrm.adjacent;
     qrmFlag = true;
     pl330Tip = tr('tip_qrm_usb', { f: f - 5, st: qrmMinus5.station });
@@ -1435,20 +1443,22 @@ function evaluateStations() {
   const ant = document.getElementById('antSelect').value;
   const minScore = parseInt(document.getElementById('minScore').value, 10) || 0;
 
-  // Blacklist (název NEBO kód země) – skryté stanice vypadnou úplně, i z QRM/radaru.
+  // Blacklist jen SKRÝVÁ (seznam, radar, časová okna) – v éteru skrytá stanice dál
+  // vysílá, takže se počítá jako rušení (QRM) ostatním. activeAll ji proto obsahuje.
   // Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech nejsilnější záznam,
   // aby duplikáty nenafukovaly seznam ani nehlásily falešné krytí kanálu.
   // Dny vysílání (pole days, např. "12" = jen pondělí a úterý) se kontrolují PŘED
   // deduplikací: stanice, která dnes nevysílá, nesmí strhávat QRM ani vytlačit dnešní záznam.
   const dayNum = ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne
   const activeAll = dedupActive(SCHEDULE_DB.filter(st =>
-    isTimeActive(st.start, st.end, utcMinutes) && passesDay(st, dayNum) && !isBlacklisted(st)));
+    isTimeActive(st.start, st.end, utcMinutes) && passesDay(st, dayNum)));
 
   const results = [];
 
   const env = { myLat, myLon, alt, balconyAz, rx, ant, weights: WEIGHTS, utcHour: now.getUTCHours(), now };
 
   for (const st of activeAll) {
+    if (isBlacklisted(st)) continue; // skrytá, ale QRM z ní platí (je v activeAll)
     results.push({
       ...st, ...scoreStation(st, env, activeAll),
       minsLeft: minutesLeft(st, utcMinutes)
@@ -1520,11 +1530,11 @@ function evaluateStations() {
   `;}).join('');
 
   renderUpcoming(activeAll, utcMinutes, env, dayNum);
-  // radar: sektorové počty ze všech aktivních (blacklist už odfiltrován), tečky top cílů
+  // radar: sektorové počty ze všech aktivních mimo blacklist, tečky top cílů
   filtered.forEach(r => { r.isTop = r.score >= SCORE_HI; });
   // výseče respektují filtr pásem (jinak by čísla neodpovídala zobrazenému seznamu)
   const activeWithBearing = activeAll
-    .filter(st => activeBand === 'all' || bandKey(st.freq) === activeBand)
+    .filter(st => !isBlacklisted(st) && (activeBand === 'all' || bandKey(st.freq) === activeBand))
     .map(st => ({ ...st, __bearing: calcGeodesic(myLat, myLon, st.lat, st.lon).bearing }));
   // tečky = TOP cíle dle skóre bez ohledu na zvolené řazení seznamu
   const topByScore = [...filtered].sort((a, b) => b.score - a.score || a.freq - b.freq);
@@ -1639,7 +1649,7 @@ function drawRadar(results, balconyAz, activeAll) {
   // 12 výsečí (30°): počet aktivních vysílačů ve směru -> sytost výseče
   const SECTORS = 12, step = 360 / SECTORS;
   const counts = new Array(SECTORS).fill(0);
-  for (const st of activeAll) { // activeAll už má blacklist odfiltrovaný
+  for (const st of activeAll) { // volající předává aktivní bez blacklistu
     counts[Math.floor((((st.__bearing ?? st.bearing) || 0) % 360) / step) % SECTORS]++;
   }
   const maxCount = Math.max(...counts, 1);

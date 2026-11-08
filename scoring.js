@@ -9,7 +9,7 @@
  * bez JS výrazů), aby ho Python spolehlivě rozparsoval. Laď jen tady — změna
  * se propíše do aplikace i do CLI radaru, takže se obě strany nerozejdou.
  *
- * blacklistDefault: skryté stanice (vypadnou úplně, i z QRM). Výchozí seznam
+ * blacklistDefault: skryté stanice (jen ze seznamu/radaru/oken; jako QRM se počítají dál). Výchozí seznam
  * skrývá jen HFCC placeholdery bez skutečného vysílatele - čínské ani jiné stanice
  * ne. Uživatel si dopíše: vzor malými (cnr) = slovo/fráze v názvu, smí za ním být
  * číslo ("cnr" chytí "CNR1", ale "cri" ne "Radio Cristiana"); kód VELKÝMI (CHN)
@@ -55,6 +55,6 @@ window.SCORING = {
     "farDivKm": 2000,
     "farPenaltyMul": 8
   },
-  "qrm": { "coChannel": -25, "adjacent": -8, "loopHalves": true },
+  "qrm": { "coChannel": -25, "adjacent": -8, "adjacentBoth": -16, "loopHalves": true },
   "blacklistDefault": ["for new organization", "new organization", "disaster relief", "unknown"]
 };

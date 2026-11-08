@@ -319,7 +319,9 @@ def _bl_matches(p, st):
 
 
 def is_blacklisted(st, patterns):
-    return any(_bl_matches(p, st) for p in patterns or ())
+    """Jako PWA isBlacklisted(): i druhý název téhož vysílání (aka)."""
+    aka = {"station": st["aka"]} if st.get("aka") else None
+    return any(_bl_matches(p, st) or (aka and _bl_matches(p, aka)) for p in patterns or ())
 
 
 def prefer_record(a, b):
@@ -1103,10 +1105,15 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp):
     if co_channel:
         qrm_penalty = q["coChannel"]
         tip = f"Silné krytí ({co_channel['station']} do {co_channel['end']} UTC). Čekej na vypnutí nosné!"
-    elif qrm_plus5 and not qrm_minus5:
+    elif qrm_plus5 and qrm_minus5:
+        # rušitel z obou stran: postranním pásmem (USB/LSB) se dá uhnout jen jednomu
+        qrm_penalty = q["adjacentBoth"]
+        tip = (f"QRM z obou stran ({st['freq'] - 5} i {st['freq'] + 5} kHz) -> "
+               f"zúži filtr na BW 2 kHz, případně sync AM!")
+    elif qrm_plus5:
         qrm_penalty = q["adjacent"]
         tip = f"QRM z {st['freq'] + 5} kHz ({qrm_plus5['station']}) -> Přepni na LSB, BFO 00, BW 2.5 kHz!"
-    elif qrm_minus5 and not qrm_plus5:
+    elif qrm_minus5:
         qrm_penalty = q["adjacent"]
         tip = f"QRM z {st['freq'] - 5} kHz ({qrm_minus5['station']}) -> Přepni na USB, BFO 00, BW 2.5 kHz!"
     if ant == "youloop" and q.get("loopHalves"):
@@ -1136,14 +1143,16 @@ def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
     if now_minutes is None:
         now_minutes = now_dt.hour * 60 + now_dt.minute
 
-    # Dny i blacklist PŘED deduplikací: stanice, která dnes nevysílá (nebo je skrytá),
-    # nesmí strhávat QRM ostatním ani vytlačit dnešní záznam téže stanice.
+    # Dny PŘED deduplikací: stanice, která dnes nevysílá, nesmí strhávat QRM ostatním
+    # ani vytlačit dnešní záznam téže stanice. Blacklist jen SKRÝVÁ z výpisu - v éteru
+    # skrytá stanice dál vysílá, takže v active_all zůstává jako zdroj rušení.
     active_all = dedup_active([
         st for st in db
         if is_time_active(st.get("start", "00:00"), st.get("end", "23:59"), now_minutes)
-        and passes_days(st, now_dt) and not is_blacklisted(st, blacklist)])
+        and passes_days(st, now_dt)])
     results = [{**st, **_score_one(st, qth, rx, ant, active_all, sfi, kp),
-                "mins_left": minutes_left(st, now_minutes)} for st in active_all]
+                "mins_left": minutes_left(st, now_minutes)}
+               for st in active_all if not is_blacklisted(st, blacklist)]
     results.sort(key=lambda r: r["score"], reverse=True)
     return results, active_all, now_minutes
 
