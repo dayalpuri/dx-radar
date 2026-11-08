@@ -1,11 +1,11 @@
 // Service Worker DX Radar Pro - po první návštěvě funguje i offline (letadlový režim na balkoně)
-const CACHE = 'dx-radar-v35';
-const ASSETS = ['./', './index.html', './scoring.js', './legal.html', './LICENSE', './manifest.webmanifest', './icon-192.png', './icon-512.png', './eibi.json'];
+const CACHE = 'dx-radar-v36';
+const ASSETS = ['./', './index.html', './scoring.js', './legal.html', './LICENSE', './manifest.webmanifest', './icon-192.png', './icon-512.png', './schedule.json', './schedule_eibi.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE).then(cache =>
-      // eibi.json nemusí existovat - proto allSettled, aby se instalace nezasekla
+      // schedule*.json nemusí existovat - proto allSettled, aby se instalace nezasekla
       Promise.allSettled(ASSETS.map(url => cache.add(new Request(url, { cache: 'reload' }))))
     ).then(() => self.skipWaiting())
   );
@@ -24,9 +24,9 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return; // NOAA API necháme online
   // NOAA telemetrii vždy ber čerstvou z webu (network-first), zbytek z cache
   if (url.hostname.startsWith('services.swpc.noaa.gov')) return;
-  // Rozvrh (eibi.json/meta) = network-first: aby se k nainstalované PWA dostal
+  // Rozvrhy (schedule*.json/meta) = network-first: aby se k nainstalované PWA dostal
   // čerstvý auto-sync z GitHubu (cron). Offline fallback = poslední z cache.
-  if (/\/eibi\.(json|meta\.json)$/.test(url.pathname)) {
+  if (/\/schedule(_eibi)?\.(json|meta\.json)$/.test(url.pathname)) {
     event.respondWith(
       fetch(event.request).then(resp => {
         const copy = resp.clone();

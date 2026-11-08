@@ -31,8 +31,9 @@ najdeš níže a v [`legal.html`](legal.html).
 | Soubor                | Role                                                        |
 |-----------------------|-------------------------------------------------------------|
 | `index.html`          | PWA „DX Radar Pro 2.0" — engine + UI + polární radar        |
-| `eibi_sync.py`        | Stahovač dat (HFCC + AOKI + EiBi → generuje `eibi.json`)    |
-| `eibi.json`           | Vygenerovaná databáze vysílacích oken (commituje se do repa = sync do mobilu) |
+| `eibi_sync.py`        | Stahovač dat (HFCC + AOKI + EiBi → generuje `schedule.json`)    |
+| `schedule.json`       | Vygenerovaná databáze (HFCC + AOKI, přesné pozice vysílačů), commituje se do repa |
+| `schedule_eibi.json`  | Volitelný EiBi doplněk (stanice mimo HFCC/AOKI, orientační pozice) |
 | `manifest.webmanifest`| PWA manifest (ikona, „Přidat na plochu")                    |
 | `sw.js`               | Service worker — po první návštěvě jede i offline           |
 | `icon-192/512.png`    | Ikony aplikace                                              |
@@ -61,7 +62,7 @@ ošetřeno (EiBi A26 se přeskočí, existuje-li B26 z HFCC/AOKI).
 ## Spuštění lokálně
 
 ```bash
-# 1) Stáhnout aktuální rozvrh a vygenerovat eibi.json (stačí 2x ročně, změna sezóny A/B)
+# 1) Stáhnout aktuální rozvrh a vygenerovat schedule.json (stačí 2x ročně, změna sezóny A/B)
 python3 eibi_sync.py --sync
 
 # 2) Lokální server pro PWA (povolí GPS/kompas na localhostu)
@@ -91,10 +92,10 @@ do `localStorage` — přežijí restart i letadlový režim. Případný nezdar
 instrukce k ruční cestě přes 📂 import (PWA umí `.csv` i `.json`).
 
 **B) Přes notebook (klasicky):** `python3 eibi_sync.py --sync` sloučí HFCC + AOKI + EiBi
-a vygeneruje `eibi.json`, který se commitne do repa — PWA ho použije jako výchozí
+a vygeneruje `schedule.json`, který se commitne do repa — PWA ho použije jako výchozí
 databázi, dokud si uživatel nestáhne vlastní.
 
-Priorita zdrojů při startu: `localStorage` (naposledy synchronizovaná) → `eibi.json`
+Priorita zdrojů při startu: `localStorage` (naposledy synchronizovaná) → `schedule.json`
 v repu → vestavěný vzorek.
 
 ## Fallback GPS na mobilu
@@ -108,7 +109,7 @@ v repu → vestavěný vzorek.
 
 - **Kód** (index.html, eibi_sync.py, sw.js, manifest, ikony, dokumentace) je pod licencí
   **MIT** — viz [`LICENSE`](LICENSE).
-- **Data rozvrhů** (eibi.json atd.) MIT nekryje — pocházejí z HFCC, AOKI a EiBi, každý
+- **Data rozvrhů** (schedule.json atd.) MIT nekryje — pocházejí z HFCC, AOKI a EiBi, každý
   pod vlastními podmínkami. Šíří se v dobré víře pro nekomerční použití.
 - Kompletní atribuce zdrojů, podmínky užití, vyloučení odpovědnosti („as is", vytvořeno
   s pomocí AI) a zásady soukromí/GDPR jsou v [`legal.html`](legal.html) (dvojjazyčně

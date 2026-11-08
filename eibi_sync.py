@@ -18,7 +18,7 @@ Dvě funkce v jednom souboru (společný datový základ pro PWA dx-radar.html):
 Bez externích závislostí - pouze standardní knihovna Pythonu 3.
 
 Použití:
-  python3 eibi_sync.py --sync                 # stáhne rozvrhy a vygeneruje eibi.json
+  python3 eibi_sync.py --sync                 # stáhne rozvrhy a vygeneruje schedule.json (+ schedule_eibi.json)
   python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --alt 300 --az 50   # radar pro zadané QTH
   python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --rx airspy --ant youloop   # jiná sestava
   python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --sort score --chance top   # jen silné, dle šance
@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 EIBI_BASE = "http://eibispace.de/dx/"
 # Zimní sezóna (B) platí od poslední říjnové neděle do poslední březnové neděle.
 SEASON_FILES = {"b": "sked-b26.csv", "a": "sked-a26.csv"}
-DEFAULT_OUT_JSON = "eibi.json"
+DEFAULT_OUT_JSON = "schedule.json"
 
 # ---------------------------------------------------------------------------
 # Zjednodušený slovník ITU kódů -> přibližné souřadnice hlavního vysílacího uzlu.
@@ -1080,7 +1080,7 @@ def main():
     ap.add_argument("--source", default="all", choices=["all", "hfcc", "aoki", "eibi"],
                     help="který seznam vysílacích rozvrhů použít (default: all)")
     ap.add_argument("--csv", help="cesta k lokálnímu sked-*.csv (místo stahování)")
-    ap.add_argument("--json", help="cesta k existujícímu eibi.json (místo CSV)")
+    ap.add_argument("--json", help="cesta k existujícímu schedule.json (místo CSV)")
     ap.add_argument("--out", default=DEFAULT_OUT_JSON, help="výstupní JSON pro --sync")
     ap.add_argument("--offline", action="store_true", help="nepřipojovat se k eibispace.de")
     ap.add_argument("--lat", type=float, help="šířka stanoviště (jinak střed ČR)")
@@ -1172,6 +1172,11 @@ def main():
         if aoki_records:
             merged = merge_schedules(merged, aoki_records)
             got_season["aoki"] = aoki_season
+    # EiBi se do schedule.json NEMERGUJE (jen country-centroid souřadnice by kazily skóre).
+    # Místo toho jde do samostatného schedule_eibi.json jako volitelný doplněk pro PWA:
+    # stanice mimo HFCC/AOKI, označené approxLoc (hrubá poloha). Appka ho přimerguje
+    # jen když uživatel zapne přepínač „+ EiBi".
+    eibi_extra = []
     if "eibi" in sources:
         csv_path = args.csv
         eibi_season = None
@@ -1181,18 +1186,21 @@ def main():
             else:
                 csv_path, eibi_season = download_eibi("sked_eibi.csv")
         if csv_path:
-            if eibi_season is None:
-                eibi_season = "b26" if "b26" in (csv_path or "") else (
-                    "a26" if "a26" in (csv_path or "") else None)
+            # download_eibi vrací název souboru (např. "sked-b26.csv") -> normalizuj na sezónu
+            tag = str(eibi_season or csv_path or "")
+            eibi_season = "b26" if "b26" in tag else ("a26" if "a26" in tag else None)
             eibi_records = parse_eibi_csv(csv_path)
-            # EiBi s letní sezónou nepřidávat, pokud jiný zdroj dodal zimní B26
             fresh = any(s == preferred for s in got_season.values())
             if eibi_records and eibi_season and eibi_season != preferred and fresh:
-                print(f"[i] EiBi ({eibi_season}) přeskočeno - data {preferred.upper()} "
-                      f"jsou k dispozici z jiných zdrojů (mixování sezón by vytvářelo duchy).")
+                print(f"[i] EiBi ({eibi_season}) doplněk přeskočen - stará sezóna vs {preferred.upper()}.")
             elif eibi_records:
-                merged = merge_schedules(merged, eibi_records)
-                got_season["eibi"] = eibi_season
+                merged_keys = {(r["freq"], r["start"], r["end"]) for r in merged}
+                for r in eibi_records:
+                    if (r["freq"], r["start"], r["end"]) not in merged_keys:
+                        r2 = dict(r)
+                        r2["approxLoc"] = True  # EiBi: poloha = centroid země, ne přesný vysílač
+                        eibi_extra.append(r2)
+                print(f"[i] EiBi doplněk: {len(eibi_extra)} stanic navíc mimo HFCC/AOKI (hrubá poloha).")
 
     if not merged:
         print("[!] Žádná data k uložení.")
@@ -1200,6 +1208,8 @@ def main():
     for src, ssn in got_season.items():
         print(f"[i] {src}: {ssn.upper()}")
     save_json(merged, args.out, sources=list(got_season.keys()))
+    if eibi_extra:
+        save_json(eibi_extra, "schedule_eibi.json", sources=["eibi"])
     return 0
 
 

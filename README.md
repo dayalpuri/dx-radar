@@ -32,8 +32,9 @@ licensing are below and in [`legal.html`](legal.html).
 | File                  | Role                                                        |
 |-----------------------|-------------------------------------------------------------|
 | `index.html`          | PWA "DX Radar Pro 2.0" — engine + UI + polar radar          |
-| `eibi_sync.py`        | Data harvester (HFCC + AOKI + EiBi → builds `eibi.json`)     |
-| `eibi.json`           | Generated database of broadcast windows (committed to the repo = synced to mobile) |
+| `eibi_sync.py`        | Data harvester (HFCC + AOKI + EiBi → builds `schedule.json`)     |
+| `schedule.json`       | Generated database (HFCC + AOKI, precise transmitter positions) committed to the repo |
+| `schedule_eibi.json`  | Optional EiBi supplement (stations not in HFCC/AOKI, approximate positions) |
 | `manifest.webmanifest`| PWA manifest (icon, "Add to Home Screen")                   |
 | `sw.js`               | Service worker — works offline after the first visit        |
 | `icon-192/512.png`    | App icons                                                   |
@@ -63,7 +64,7 @@ handled (EiBi A26 is skipped if a B26 from HFCC/AOKI exists).
 ## Running locally
 
 ```bash
-# 1) Download the current schedule and build eibi.json (twice a year is enough, at the A/B season change)
+# 1) Download the current schedule and build schedule.json (twice a year is enough, at the A/B season change)
 python3 eibi_sync.py --sync
 
 # 2) Serve the PWA locally (enables GPS/compass on localhost)
@@ -94,10 +95,10 @@ airplane mode. On failure the app shows instructions for the manual 📂 import 
 (the PWA reads `.csv` and `.json`).
 
 **B) Via a laptop (classic):** `python3 eibi_sync.py --sync` merges HFCC + AOKI + EiBi
-and builds `eibi.json`, which you commit to the repo — the PWA uses it as the default
+and builds `schedule.json`, which you commit to the repo — the PWA uses it as the default
 database until the user downloads their own.
 
-Source priority at startup: `localStorage` (last synced) → `eibi.json` in the repo →
+Source priority at startup: `localStorage` (last synced) → `schedule.json` in the repo →
 built-in sample.
 
 ## Sync devel → mobile (workflow)
@@ -106,8 +107,8 @@ The repository is the single source of truth. After a season change (end of Octo
 end of March):
 
 ```bash
-python3 eibi_sync.py --sync          # new eibi.json
-git add eibi.json && git commit -m "B26: schedule update" && git push
+python3 eibi_sync.py --sync          # new schedule.json
+git add schedule.json && git commit -m "B26: schedule update" && git push
 # on next online open, mobile picks up fresh data from Pages
 ```
 
@@ -122,7 +123,7 @@ git add eibi.json && git commit -m "B26: schedule update" && git push
 
 - **Code** (index.html, eibi_sync.py, sw.js, manifest, icons, docs) is licensed under
   **MIT** — see [`LICENSE`](LICENSE).
-- **Schedule data** (eibi.json etc.) is NOT covered by MIT — it comes from HFCC, AOKI
+- **Schedule data** (schedule.json etc.) is NOT covered by MIT — it comes from HFCC, AOKI
   and EiBi, each under its own terms, redistributed in good faith for non-commercial use.
 - Full attribution, usage terms, the disclaimer ("as is", built with AI) and the
   privacy/GDPR notice are in [`legal.html`](legal.html) (bilingual EN/CS; also linked
