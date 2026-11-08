@@ -324,9 +324,11 @@ def is_blacklisted(st, patterns):
     return any(_bl_matches(p, st) or (aka and _bl_matches(p, aka)) for p in patterns or ())
 
 
-def make_ctx(qth, rx, ant, sfi, kp):
-    """Kontext jednoho přepočtu (jako env v PWA) + cache skóre dopadu na QTH."""
-    return {"qth": qth, "rx": rx, "ant": ant, "sfi": sfi, "kp": kp, "arrival": {}}
+def make_ctx(qth, rx, ant, sfi, kp, now=None):
+    """Kontext jednoho přepočtu (jako env v PWA) + cache skóre dopadu na QTH.
+    now = jednotný čas celého přepočtu (poloha Slunce), ne systémový čas per stanice."""
+    return {"qth": qth, "rx": rx, "ant": ant, "sfi": sfi, "kp": kp, "arrival": {},
+            "now": now or datetime.now(timezone.utc)}
 
 
 def arrival_score(st, ctx):
@@ -358,9 +360,22 @@ def prefer_record(a, b, ctx):
     return b if b.get("kw", 0) > a.get("kw", 0) else a
 
 
+def _is_placeholder(st):
+    """HFCC rezervační slot bez vysílatele („For new organization") - reálně vysílá, ale jméno není."""
+    return any(_bl_matches(p, st) for p in SCORING["placeholderNames"])
+
+
 def _merge_twin(a, b, ctx):
+    """Jako PWA mergeTwin(): placeholder vs skutečný program téhož vysílače -> technická
+    data z preferovaného záznamu, identita (název, země, jazyk) ze skutečného; placeholder
+    se nedrží ani jako aka (jinak by ho výchozí blacklist skryl i se skutečnou stanicí)."""
     kept = prefer_record(a, b, ctx)
     other = b if kept is a else a
+    if _is_placeholder(kept) and not _is_placeholder(other):
+        return {**kept, "station": other.get("station"), "country": other.get("country"),
+                "lang": other.get("lang"), "aka": other.get("aka")}
+    if _is_placeholder(other):
+        return kept
     if not kept.get("aka") and other.get("station") != kept.get("station"):
         kept = {**kept, "aka": other.get("station")}
     return kept
@@ -874,14 +889,12 @@ def same_station(a, b):
     return long_[:len(short)] == short and not set(short) <= _GENERIC_WORDS
 
 
-SAME_SITE_KM = 10
-
-
 def _same_site(a, b):
-    """Stejné vysílací místo (do SAME_SITE_KM) - jen u přesných poloh, ne EiBi centroidů."""
+    """Stejný vysílací komplex (do dedup.sameSiteKm ze scoring.js; HFCC „Sofia" vs AOKI
+    „Kostinbrod" 20 km) - jen u přesných poloh, ne EiBi centroidů."""
     if a.get("approxLoc") or b.get("approxLoc"):
         return False
-    return calc_geodesic(a["lat"], a["lon"], b["lat"], b["lon"])[0] <= SAME_SITE_KM
+    return calc_geodesic(a["lat"], a["lon"], b["lat"], b["lon"])[0] <= SCORING["dedup"]["sameSiteKm"]
 
 
 def _days_cover(o, r):
@@ -998,13 +1011,18 @@ def passes_days(st, now_dt, day=None):
     return str(day or now_dt.isoweekday()) in days  # 1=Po ... 7=Ne
 
 
+def solar_declination(dt):
+    """Deklinace Slunce (°, +23,44 v létě, −23,44 v zimě) - roční období pro MUF i elevaci."""
+    # fractional day-of-year (vč. hodin), ať sedí s JS: doy = (d - UTC(rok,0,0))/den
+    doy = dt.timetuple().tm_yday + (dt.hour + dt.minute / 60) / 24
+    return -23.44 * math.cos(math.radians((360 / 365) * (doy + 10)))
+
+
 def solar_elevation(lat, lon, dt):
     """Elevace Slunce (°) nad bodem v daném UTC čase (pro denní absorpci)."""
     rad = math.pi / 180
-    # fractional day-of-year (vč. hodin), ať sedí s JS: doy = (d - UTC(rok,0,0))/den
     hour_utc = dt.hour + dt.minute / 60
-    doy = dt.timetuple().tm_yday + hour_utc / 24
-    decl = -23.44 * math.cos(rad * (360 / 365) * (doy + 10))
+    decl = solar_declination(dt)
     solar_time = hour_utc + lon / 15
     ha = (solar_time - 12) * 15
     return math.degrees(math.asin(
@@ -1026,11 +1044,13 @@ def day_absorption(freq, my_lat, my_lon, st_lat, st_lon, dt):
     return -jround(math.sin(math.radians(sun_el)) * freq_factor * da["maxPenalty"])
 
 
-def muf_estimate(sfi, daylight=0.0):
+def muf_estimate(sfi, daylight=0.0, decl=0.0):
     """MUF odhad; denní posun plynule dle osvětlení prostředku trasy (daylight 0..1,
-    gray-line) - bez pevných hodin, sedí v každém ročním období. Shodné s PWA mufEstimate()."""
+    gray-line). decl = deklinace Slunce: letní noční F2 vrstva nestihne zrekombinovat
+    -> noční MUF ±seasonNight MHz (ve dne člen mizí). Shodné s PWA mufEstimate()."""
     m = SCORING["muf"]
-    return jround(m["const"] + m["sfiMul"] * sfi + m["dayBoost"] * daylight)
+    return jround(m["const"] + m["sfiMul"] * sfi + m["dayBoost"] * daylight
+                  + m["seasonNight"] * (decl / 23.44) * (1 - daylight))
 
 
 def path_daylight(lat1, lon1, lat2, lon2, dt):
@@ -1040,10 +1060,10 @@ def path_daylight(lat1, lon1, lat2, lon2, dt):
     return min(1.0, max(0.0, (el - m["smoothFromDeg"]) / (m["smoothToDeg"] - m["smoothFromDeg"])))
 
 
-def propagation_adjust(freq, bearing, sfi, kp, daylight=0.0):
+def propagation_adjust(freq, bearing, sfi, kp, daylight=0.0, decl=0.0):
     """Okno LUF-MUF + aurorální absorpce; shodné s PWA propagationAdjust()."""
     p = SCORING["prop"]
-    muf = muf_estimate(sfi, daylight)
+    muf = muf_estimate(sfi, daylight, decl)
     adj = 0
     if freq > muf * 1000 + p["mufMarginKHz"]:
         adj += p["aboveMufPenalty"]
@@ -1081,7 +1101,8 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
     Hlavní výpis dostává právě vysílající; časová okna budoucí stav:
     ▶ po startu stanice, 🔓 po vypnutí rušitele."""
     lat, lon, alt, az_balcony = qth["lat"], qth["lon"], qth["alt"], qth["az"]
-    now = datetime.now(timezone.utc)
+    ctx = ctx or make_ctx(qth, rx, ant, sfi, kp)
+    now = ctx["now"]  # jednotný čas přepočtu (jako env.now v PWA), ne per stanice
     w = SCORING["weightsDefault"]
     dist, bearing = calc_geodesic(lat, lon, st["lat"], st["lon"])
 
@@ -1120,12 +1141,11 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
     power = jround(math.log10(max(st.get("kw") or 0, 1) / SCORING["power"]["centerKw"]) * SCORING["power"]["mul"])
 
     daylight = path_daylight(lat, lon, st["lat"], st["lon"], now)
-    prop_adj = propagation_adjust(st["freq"], bearing, sfi, kp, daylight)
+    prop_adj = propagation_adjust(st["freq"], bearing, sfi, kp, daylight, solar_declination(now))
     day_absorb = day_absorption(st["freq"], lat, lon, st["lat"], st["lon"], now)
     skip = skip_term(st["freq"], dist)
 
     # QRM jen od rušitelů, kteří na QTH reálně dopadají silněji; active_now=None = bez QRM
-    ctx = ctx or make_ctx(qth, rx, ant, sfi, kp)
     qrm_now = active_now or []
     qrm_plus5 = next((o for o in qrm_now if o is not st
                       and o["freq"] == st["freq"] + 5 and louder(o, st, ctx)), None)
@@ -1167,21 +1187,24 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
 
 
 def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
-                   blacklist=(), now_minutes=None):
+                   blacklist=(), now_minutes=None, now_dt=None):
     """Stejný pipeline jako PWA evaluateStations(): aktivní teď + dnes + mimo blacklist,
-    deduplikace, pak skóre proti tomuto stavu éteru."""
+    deduplikace, pak skóre proti tomuto stavu éteru. now_dt/now_minutes = jednotný čas
+    celého přepočtu (i pro polohu Slunce); now_minutes přebije čas dne z now_dt."""
     if sfi is None:
         sfi = SCORING["spaceWeatherDefault"]["sfi"]
     if kp is None:
         kp = SCORING["spaceWeatherDefault"]["kp"]
-    now_dt = datetime.now(timezone.utc)
+    now_dt = now_dt or datetime.now(timezone.utc)
     if now_minutes is None:
         now_minutes = now_dt.hour * 60 + now_dt.minute
+    else:
+        now_dt = now_dt.replace(hour=now_minutes // 60, minute=now_minutes % 60)
 
     # Dny PŘED deduplikací: stanice, která dnes nevysílá, nesmí strhávat QRM ostatním
     # ani vytlačit dnešní záznam téže stanice. Blacklist jen SKRÝVÁ z výpisu - v éteru
     # skrytá stanice dál vysílá, takže v active_all zůstává jako zdroj rušení.
-    ctx = make_ctx(qth, rx, ant, sfi, kp)
+    ctx = make_ctx(qth, rx, ant, sfi, kp, now_dt)
     active_all = dedup_active([
         st for st in db
         if is_time_active(st.get("start", "00:00"), st.get("end", "23:59"), now_minutes)
@@ -1194,15 +1217,15 @@ def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
 
 
 def collect_time_windows(db, active_all, now_minutes, blacklist, qth, rx, ant,
-                         sfi, kp, max_min=60, min_score=0):
+                         sfi, kp, max_min=60, min_score=0, now_dt=None):
     """⏱ Časová okna: jen budoucí události, které zatím neslyšíš -
     startující stanice (▶) a kanály, kde silný rušitel brzy vypne (🔓).
     ŠANCE se počítá proti budoucímu stavu éteru (po startu / po vypnutí
     rušitele), takže okna jdou řadit i podle pravděpodobnosti úlovku."""
-    now_dt = datetime.now(timezone.utc)
+    now_dt = now_dt or datetime.now(timezone.utc)
     today = now_dt.isoweekday()
     tomorrow = today % 7 + 1
-    ctx = make_ctx(qth, rx, ant, sfi, kp)
+    ctx = make_ctx(qth, rx, ant, sfi, kp, now_dt)
     items = []
     seen = set()
 
@@ -1217,20 +1240,16 @@ def collect_time_windows(db, active_all, now_minutes, blacklist, qth, rx, ant,
         items.append({"t": t, "typ": typ, "freq": st["freq"], "station": st["station"],
                       "kw": st.get("kw", 0), "score": sc["score"], "info": info})
 
-    # a) Kanál, kde silný rušitel brzy vypne a vyčistí frekvenci slabšímu DXovi
-    for st in db:
+    # a) Kanál, kde silný rušitel brzy vypne a vyčistí frekvenci slabšímu DXovi.
+    # Jen deduplikované active_all: surová db by u duplikátu téže stanice (HFCC+AOKI)
+    # hlásila, že ji „překrývá" její vlastní dvojče.
+    for st in active_all:
         if is_blacklisted(st, blacklist):
-            continue
-        if not is_time_active(st.get("start", "00:00"), st.get("end", "23:59"), now_minutes):
-            continue
-        if not passes_days(st, now_dt):
             continue
         stronger = next((o for o in active_all if o is not st
                          and o["freq"] == st["freq"] and louder(o, st, ctx)), None)
         if not stronger:
             continue
-        if station_key(stronger) == station_key(st):
-            continue  # stejná stanice (duplikát z jiného zdroje), ne rušitel
         clear_in = minutes_left(stronger, now_minutes)  # celodenní rušitel = inf, nevypne
         if clear_in <= max_min:
             # šance až po vyčištění kanálu: silnější rušitelé už nevysílají
@@ -1239,8 +1258,12 @@ def collect_time_windows(db, active_all, now_minutes, blacklist, qth, rx, ant,
             push(st, clear_in, "🔓",
                  f"od {stronger['end']} UTC čistý kanál (vypíná {stronger['station']})", cleaned)
     # b) Stanice, které právě nejdou, ale startují v příští hodině.
-    # Co už teď na stejném kmitočtu vysílá (navazující blok), není „nový start".
-    seen.update(station_key(st) for st in active_all)
+    # Co už teď na stejném kmitočtu vysílá (navazující blok, i pod druhým názvem aka),
+    # není „nový start".
+    for st in active_all:
+        seen.add(station_key(st))
+        if st.get("aka"):
+            seen.add(station_key({"freq": st["freq"], "station": st["aka"]}))
     for st in db:
         if is_blacklisted(st, blacklist):
             continue
@@ -1252,14 +1275,18 @@ def collect_time_windows(db, active_all, now_minutes, blacklist, qth, rx, ant,
         # start po půlnoci UTC = zítřejší den vysílání
         if not passes_days(st, now_dt, tomorrow if now_minutes + starts_in >= 1440 else today):
             continue
+        # Stejný vysílač už na kmitočtu běží a poběží i po tomto startu = totéž vysílání
+        # pod jiným názvem (HFCC provozovatel vs AOKI program), ne nový start.
+        if any(o["freq"] == st["freq"] and _same_site(o, st)
+               and minutes_left(o, now_minutes) > starts_in for o in active_all):
+            continue
         push(st, starts_in, "▶", f"start v {st.get('start', '?')} UTC", active_all)
     items.sort(key=lambda x: x["t"])
     return items
 
 
 def print_radar(results, windows, qth, rx, ant, now_minutes, limit=12, sort="freq", chance_label=""):
-    now = datetime.now(timezone.utc)
-    utc_str = now.strftime("%H:%M")
+    utc_str = f"{now_minutes // 60:02d}:{now_minutes % 60:02d}"
     width = 94  # šířka tabulky cílů (jedno cíl = jeden řádek)
     hi, mid = SCORING["boundaries"]["hi"], SCORING["boundaries"]["mid"]
     sort_label = "dle kmitočtu" if sort == "freq" else "dle šance na úlovek"
@@ -1373,8 +1400,10 @@ def main():
                   "Zadej svoje QTH: --lat 50.08 --lon 14.42 --alt 300 --az 180")
         db, source = load_schedule(args)
         blacklist = () if args.no_blacklist else SCORING["blacklistDefault"]
+        now_dt = datetime.now(timezone.utc)  # jeden čas pro cíle i okna (poloha Slunce)
         results, active, now_minutes = score_stations(
-            db, qth, rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp, blacklist=blacklist)
+            db, qth, rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp, blacklist=blacklist,
+            now_dt=now_dt)
         if args.sort == "freq":
             results.sort(key=lambda r: (r["freq"], -r["score"]))
         else:
@@ -1397,7 +1426,8 @@ def main():
         windows = collect_time_windows(db, active, now_minutes,
                                        blacklist=blacklist, qth=qth,
                                        rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp,
-                                       min_score=mid if args.min_score is None else args.min_score)
+                                       min_score=mid if args.min_score is None else args.min_score,
+                                       now_dt=now_dt)
         print(f"[i] Zdroj dat: {source} ({len(db)} záznamů)")
         print_radar(shown, windows, qth, args.rx, args.ant, now_minutes,
                     args.limit, args.sort, chance_label)

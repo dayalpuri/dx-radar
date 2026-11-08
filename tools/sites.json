@@ -1,0 +1,15 @@
+{
+  "rx": {
+    "praha": [50.1, 14.5], "skorkov": [50.21, 14.72], "becva": [49.43, 18.3],
+    "turecko": [36.9, 30.7], "veselice": [49.4, 16.7]
+  },
+  "tx": {
+    "issoudun": [46.95, 1.95], "noblejas": [39.97, -3.43], "nauen": [52.65, 12.91], "mwv": [-15.7, 46.4],
+    "tiganesti": [44.75, 26.1], "galbeni": [46.5, 26.9], "saftica": [44.6, 26.1], "sontay": [21.13, 105.5],
+    "sirjan": [29.45, 55.68], "rangitaiki": [-38.8, 176.4], "urumqi": [43.82, 87.61], "kashgar": [39.47, 75.98],
+    "bangalore": [13.23, 77.7], "emirler": [39.5, 32.8], "woofferton": [52.3, -2.7], "kujang": [40.0, 126.0],
+    "tashkent": [41.2, 69.2], "okeechobee": [27.5, -80.9], "toronto": [44.0, -79.4], "kostinbrod": [42.8, 23.2],
+    "tinang": [15.3, 120.6], "sulaibiyah": [29.2, 47.8], "bocaue": [14.8, 120.9], "bamako": [12.65, -8.0],
+    "junglinster": [49.7, 6.25], "rohrbach": [48.78, 11.46], "sveio": [59.6, 5.3], "tallinn": [59.4, 24.7]
+  }
+}
