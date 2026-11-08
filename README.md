@@ -13,7 +13,7 @@ Postaveno na konverzaci s Gemini (zima B26).
 | Soubor                | Role                                                        |
 |-----------------------|-------------------------------------------------------------|
 | `index.html`          | PWA „DX Radar Pro 2.0" — engine + UI + polární radar |
-| `eibi_sync.py`         | Data Harvester + CLI radar (HFCC + EiBi, generování `eibi.json`, terminálový výstup `--now`) |
+| `eibi_sync.py`         | Data Harvester + CLI radar (HFCC + AOKI + EiBi, generování `eibi.json`, terminálový výstup `--now`) |
 | `eibi.json`           | Vygenerovaná databáze vysílacích oken (commituje se do repa = sync do mobilu) |
 | `manifest.webmanifest`| PWA manifest (ikona, „Přidat na plochu")                    |
 | `sw.js`               | Service worker — po první návštěvě jede i offline           |
@@ -27,8 +27,8 @@ Postaveno na konverzaci s Gemini (zima B26).
 | **AOKI** (Bi Newsletter for DXers, „AOKI list"; osobní newsletter správce webu, ne oficiální NDXC) | nejlepší jména stanic, přesné souřadnice (DDMMSS), výkony, azimuty, dny; distribuce zip se Shift-JIS | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
 | **EiBi** | největší množství stanic (~6 400), často dřív než HFCC; země jen přibližně (ITU → GPS) | `eibispace.de/dx/sked-*.csv` |
 
-Sloučení v pořadí HFCC > AOKI > EiBi; zástaralá sezóna se míchání s čerstvou
-brání (EiBi A26 se přeskočí, existuje-li B26 z HFCC/AOKI). CLI: `--source all|hfcc|aoki|eibi`.
+Slučuje se v pořadí HFCC > AOKI > EiBi; míchání zastaralé sezóny s čerstvou je
+ošetřeno (EiBi A26 se přeskočí, existuje-li B26 z HFCC/AOKI). CLI: `--source all|hfcc|aoki|eibi`.
 
 ## SWL deník a ověření stanice přes web
 
