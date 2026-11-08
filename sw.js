@@ -1,6 +1,6 @@
 // Service Worker DX Radar Pro - po první návštěvě funguje i offline (letadlový režim na balkoně)
-const CACHE = 'dx-radar-v31';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './eibi.json'];
+const CACHE = 'dx-radar-v32';
+const ASSETS = ['./', './index.html', './legal.html', './LICENSE', './manifest.webmanifest', './icon-192.png', './icon-512.png', './eibi.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(

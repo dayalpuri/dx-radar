@@ -526,7 +526,9 @@ def sync_hfcc(preferred_season):
 
 
 # ---------------------------------------------------------------------------
-# 1c) AOKI (Bi Newsletter, Nagoya DX Circle) - třetí velký seznam.
+# 1c) AOKI ("Bi Newsletter for DXers", běžně "AOKI list") - třetí velký seznam.
+#      Pozn.: osobní newsletter správce webu, ne oficiální materiál klubu NDXC.
+#      Tvůrce neuvádí licenci; používáno nekomerčně s atribucí (viz legal.html).
 #      Nejlepší jména stanic, přesné souřadnice vysílačů (DDMMSS), výkony,
 #      azimuty i dny vysílání; distribuce jako zip se Shift-JIS textem.
 # ---------------------------------------------------------------------------

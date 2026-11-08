@@ -24,7 +24,7 @@ Postaveno na konverzaci s Gemini (zima B26).
 | Seznam | Co dává | Kde |
 |--------|---------|-----|
 | **HFCC** | zimní/letní rozvrh dle skutečné sezóny, **přesné GPS vysílačů** (site.txt), reálné výkony kW, **azimuty antén** (korekce směrovosti!), dny vysílání, jména vysílatelů | `hfcc.org/data/{a,b}26/` |
-| **AOKI** (Bi Newsletter, Nagoya DX Circle) | nejlepší jména stanic, přesné souřadnice (DDMMSS), výkony, azimuty, dny; distribuce zip se Shift-JIS | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
+| **AOKI** (Bi Newsletter for DXers, „AOKI list"; osobní newsletter správce webu, ne oficiální NDXC) | nejlepší jména stanic, přesné souřadnice (DDMMSS), výkony, azimuty, dny; distribuce zip se Shift-JIS | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
 | **EiBi** | největší množství stanic (~6 400), často dřív než HFCC; země jen přibližně (ITU → GPS) | `eibispace.de/dx/sked-*.csv` |
 
 Sloučení v pořadí HFCC > AOKI > EiBi; zástaralá sezóna se míchání s čerstvou
@@ -102,6 +102,25 @@ jako vlastní repozitář → `gh pages` → na mobilu přidáno na plochu.
   jen lokálně (localStorage v tomto prohlížeči / nainstalované PWA), nikdy do repa.
 - Tlačítko 📍 GPS: přes `https://` (Pages) plná GPS + kompas; při `file://`
   nebo odmítnutí GPS zkusí přibližnou polohu z IP (±50 km).
+
+## Licence a právní informace
+
+- **Kód** (index.html, eibi_sync.py, sw.js, manifest, ikony, dokumentace) je pod licencí
+  **MIT** — viz [`LICENSE`](LICENSE).
+- **Data rozvrhů** (eibi.json atd.) MIT nekryje — pocházejí z HFCC, AOKI a EiBi,
+  každý pod vlastními podmínkami. Šíří se v dobré víře pro nekomerční použití.
+- Kompletní atribuce zdrojů dat, podmínky užití, vyloučení odpovědnosti („as is",
+  vytvořeno s pomocí AI) a zásady soukromí/GDPR jsou v [`legal.html`](legal.html)
+  (dvojjazyčně CZ/EN, odkaz je i v patičce aplikace).
+
+Zdroj dat | Licence / podmínky
+----------|-------------------
+**EiBi** | volné použití vč. software třetích stran (autor Eike Bierwirth, eibispace.de)
+**HFCC/IBD** | veřejná koordinační data („Public Data Files", free access), hfcc.org
+**Bi Newsletter („AOKI list")** | tvůrce neuvádí licenci; šířeno v dobré víře nekomerčně s atribucí (zvyklost DX komunity)
+
+> Aplikace sama neukládá žádná osobní data (žádný backend, cookies ani analytika);
+> uživatelská nastavení žijí jen v `localStorage`. Detaily v `legal.html`.
 
 ## Bez závislostí
 

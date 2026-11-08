@@ -1,0 +1,49 @@
+MIT License
+
+Copyright (c) 2026 dayalpuri (https://github.com/dayalpuri)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+NOTE ON BUNDLED DATA (NOT covered by the MIT licence above)
+
+The MIT licence covers only the original source code of this project
+(index.html, eibi_sync.py, sw.js, manifest.webmanifest, icons and documentation).
+
+The broadcast-schedule data files (eibi.json, eibi.meta.json, sked_eibi.csv and
+any schedule data downloaded at runtime) are NOT original to this project. They
+are compiled from third-party sources, each under its own terms:
+
+  - HFCC/IBD public data   — http://www.hfcc.org/  (publicly published
+                             coordination data, "free access")
+  - Bi Newsletter for DXers (commonly known as the AOKI list)
+                             — http://www1.s2.starcat.ne.jp/ndxc/
+                             No licence is stated by the compiler. Redistributed
+                             here in good faith for non-commercial use, with
+                             attribution. (A non-commercial, attribution norm is
+                             common practice in the DX community; it is not a
+                             licence stated by the compiler.)
+  - EiBi Shortwave Schedules by Eike Bierwirth
+                             — http://eibispace.de/  (free to download, use,
+                             copy, distribute and use within third-party software)
+
+See legal.html for the full attribution, usage terms and privacy information.
+These data files are redistributed in good faith for non-commercial use; they
+remain the property of their respective compilers.

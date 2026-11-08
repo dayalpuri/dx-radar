@@ -738,12 +738,19 @@
 
 <div class="toast" id="toast" data-i18n="toast_copied">Zkopírováno do schránky (Markdown)!</div>
 
+<footer style="max-width:860px; margin:28px auto 16px; padding:14px 16px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; line-height:1.6; text-align:center;">
+  <span data-i18n="footer_made">Nekomerční hobby projekt · data: HFCC, AOKI, EiBi · vytvořeno s pomocí AI · bez záruky</span>
+  · <a href="legal.html" style="color:var(--accent); text-decoration:none;" data-i18n="footer_legal">Licence, zdroje dat a soukromí</a>
+</footer>
+
 <script>
 // 0. I18N — dvojjazyčné UI (čeština / angličtina), přepínač v hlavičce.
 //    tr(key, params) vrátí řetězec v aktuálním jazyce; {x} se nahradí z params.
 const I18N = {
   cs: {
     subtitle: "Kontextový SWL radar krátkých vln",
+    footer_made: "Nekomerční hobby projekt · data: HFCC, AOKI, EiBi · vytvořeno s pomocí AI · bez záruky",
+    footer_legal: "Licence, zdroje dat a soukromí",
     theme_title: "Přepnout barevný motiv", log_btn: "📖 Log",
     qth_label: "Poloha (QTH — šířka, délka)", qth_ph: "např. 50.08, 14.42",
     alt_label: "Nadm. výška (m)", rx_label: "Přijímač", ant_label: "Anténa",
@@ -817,6 +824,8 @@ const I18N = {
   },
   en: {
     subtitle: "Context-aware shortwave SWL radar",
+    footer_made: "Non-commercial hobby project · data: HFCC, AOKI, EiBi · built with AI · no warranty",
+    footer_legal: "Licence, data sources & privacy",
     theme_title: "Switch colour theme", log_btn: "📖 Log",
     qth_label: "Location (QTH — lat, lon)", qth_ph: "e.g. 50.08, 14.42",
     alt_label: "Altitude (m)", rx_label: "Receiver", ant_label: "Antenna",
