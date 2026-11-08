@@ -9,26 +9,26 @@ Dvě funkce v jednom souboru (společný datový základ pro PWA dx-radar.html):
                  (isChina: true) a vygeneruje eibi_b26.json pro import do PWA.
 
   2. CLI RADAR:  s parametrem --now vypíše stejný "DX Radar" jako PWA přímo
-                 do terminálu (sférická trigonometrie, kardioidní maska balkónu,
-                 bonus nadmořské výšky, detekce QRM ±5 kHz, tipy pro PL-330).
-                 Cíle jsou deduplikované napříč zdroji a defaultně řazené
-                 dle kmitočtu (--sort score = dle šance). Časová okna obsahují
-                 jen budoucí události (starty ▶, uvolňující se kanály 🔓);
-                 brzy končící cíle se značí ⏹ přímo ve výpisu cílů.
+                 do terminálu. Skóre počítá 1:1 stejně jako aplikace - obě
+                 strany sdílí konstanty ze scoring.js (jediný zdroj), takže se
+                 nerozcházejí. Cíle jsou deduplikované napříč zdroji a defaultně
+                 řazené dle kmitočtu (--sort score = dle šance). Časová okna
+                 obsahují jen budoucí události (starty ▶, uvolňující se kanály 🔓).
 
 Bez externích závislostí - pouze standardní knihovna Pythonu 3.
 
 Použití:
-  python3 eibi_sync.py --sync                 # stáhne EiBi a vygeneruje eibi.json
-  python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --alt 300 --az 180   # radar pro zadané QTH
-  python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --sort score  # cíle řazené dle skóre
-  python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --csv eibi.csv  # radar z lokálního CSV
+  python3 eibi_sync.py --sync                 # stáhne rozvrhy a vygeneruje eibi.json
+  python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --alt 300 --az 50   # radar pro zadané QTH
+  python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --rx airspy --ant youloop   # jiná sestava
+  python3 eibi_sync.py --now --lat 50.08 --lon 14.42 --sort score --chance top   # jen silné, dle šance
 """
 
 import argparse
 import csv
 import json
 import math
+import os
 import re
 import sys
 import urllib.request
@@ -182,6 +182,21 @@ CHINA_NAME_PATTERNS = ("CRI", "China Radio", "CNR", "China National", "PBS ",
 # Generické výchozí QTH (střed ČR) — žádná konkrétní soukromá poloha v repu.
 # Vlastní stanoviště zadej přes --lat/--lon/--alt/--az.
 DEFAULT_QTH = {"name": "Výchozí (střed ČR)", "lat": 49.80, "lon": 15.47, "alt": 300, "az": 180}
+
+
+# --- Laditelné konstanty skóre: JEDINÝ ZDROJ je scoring.js (čte ho i PWA) ---
+# Díky tomu se CLI radar a aplikace v prohlížeči nemůžou rozejít - laď jen scoring.js.
+def _load_scoring():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scoring.js")
+    with open(path, encoding="utf-8") as fh:
+        txt = fh.read()
+    m = re.search(r"window\.SCORING\s*=\s*(\{.*?\});", txt, re.DOTALL)
+    if not m:
+        raise RuntimeError("scoring.js: blok 'window.SCORING = {...}' nenalezen")
+    return json.loads(m.group(1))
+
+
+SCORING = _load_scoring()
 
 # Vzorek databáze (fallback pro --now bez dat; identický s PWA, aby výstupy seděly)
 SAMPLE_DB = [
@@ -746,7 +761,8 @@ def load_schedule(args):
 # ---------------------------------------------------------------------------
 # 2) CLI RADAR: stejný pipeline jako PWA, výstup do terminálu
 # ---------------------------------------------------------------------------
-ANTENNA_LABELS = {"whip": "Prut 60cm", "wire": "Dlouhý drát", "loop": "Smyčka MLA-30+"}
+ANTENNA_LABELS = {"whip": "Prut 60cm", "wire": "7m drát na cívce", "youloop": "YouLoop"}
+RX_LABELS = {"pl330": "Tecsun PL-330", "airspy": "Airspy HF+ Discovery", "ats4732": "Mini ATS-4732"}
 
 
 def passes_days(st, now_dt):
@@ -771,33 +787,82 @@ def solar_elevation(lat, lon, dt):
 
 
 def day_absorption(freq, my_lat, my_lon, st_lat, st_lon, dt):
-    """Denní absorpce D-vrstvy: osvětlená trasa pod ~10 MHz je silně tlumená.
+    """Denní absorpce D-vrstvy: osvětlená trasa pod freqCeil je silně tlumená.
     Shodné s PWA - hlavní oprava fantomových dálkových stanic v poledne."""
-    if freq >= 10000:
+    da = SCORING["dayAbsorption"]
+    if freq >= da["freqCeilKHz"]:
         return 0
     mid_lat, mid_lon = (my_lat + st_lat) / 2, (my_lon + st_lon) / 2
     sun_el = solar_elevation(mid_lat, mid_lon, dt)
     if sun_el <= 0:
         return 0
-    freq_factor = (10000 - freq) / 10000
-    return -round(math.sin(math.radians(sun_el)) * freq_factor * 40)
+    freq_factor = (da["freqCeilKHz"] - freq) / da["freqCeilKHz"]
+    return -round(math.sin(math.radians(sun_el)) * freq_factor * da["maxPenalty"])
 
 
-def _score_one(st, qth, rx, active_now):
+def muf_estimate(sfi, utc_hours, path_sunlit=False):
+    """MUF odhad; denní posun platí v lokálním okně NEBO při osvětlené trase (gray-line)."""
+    m = SCORING["muf"]
+    base = m["const"] + m["sfiMul"] * sfi
+    daytime = (m["dayStartH"] <= utc_hours <= m["dayEndH"]) or path_sunlit
+    return round((base + m["dayBoost"]) if daytime else base)
+
+
+def propagation_adjust(freq, bearing, sfi, kp, utc_hours, path_sunlit=False):
+    """Okno LUF-MUF + aurorální absorpce; shodné s PWA propagationAdjust()."""
+    p = SCORING["prop"]
+    muf = muf_estimate(sfi, utc_hours, path_sunlit)
+    adj = 0
+    if freq > muf * 1000 + p["mufMarginKHz"]:
+        adj += p["aboveMufPenalty"]
+    elif freq > muf * 1000 - p["mufMarginKHz"]:
+        adj += p["nearMufPenalty"]
+    if kp >= p["auroralKp"] and (bearing >= p["auroralFromDeg"] or bearing <= p["auroralToDeg"]):
+        adj += p["auroralPenalty"]
+    return adj
+
+
+def skip_term(freq, dist):
+    """Mrtvá zóna (skip) + multi-hop útlum; shodné s PWA skipTerm()."""
+    sk = SCORING["skip"]
+    f_mhz = freq / 1000
+    floor = min(max((f_mhz - sk["pivotMHz"]) * sk["slopeKmPerMHz"], 0), sk["floorCapKm"])
+    s = 0
+    if dist < floor:
+        s -= round((floor - dist) / floor * sk["nearPenaltyMax"])
+    if dist > sk["farStartKm"]:
+        s -= round((dist - sk["farStartKm"]) / sk["farDivKm"] * sk["farPenaltyMul"])
+    return s
+
+
+def _ant_band(buckets, f):
+    """Anténní zisk dle pásma: první práh, pod který freq spadá."""
+    for lim, val in buckets:
+        if f < lim:
+            return val
+    return 0
+
+
+def _score_one(st, qth, rx, ant, active_now, sfi, kp):
     """Šance jedné stanice proti zadanému stavu éteru (active_now).
-    Hlavní výpis jí předává právě vysílající; časová okna budoucí stav:
+    1:1 zrcadlo scoreStation() z PWA; konstanty ze SCORING (scoring.js).
+    Hlavní výpis dostává právě vysílající; časová okna budoucí stav:
     ▶ po startu stanice, 🔓 po vypnutí rušitele."""
     lat, lon, alt, az_balcony = qth["lat"], qth["lon"], qth["alt"], qth["az"]
+    now = datetime.now(timezone.utc)
+    utc_hour = now.hour
+    w = SCORING["weightsDefault"]
     dist, bearing = calc_geodesic(lat, lon, st["lat"], st["lon"])
+
     diff = abs(bearing - az_balcony)
     if diff > 180:
         diff = 360 - diff
-    balcony_bonus = round(math.cos(math.radians(diff)) * 25)
-    alt_factor = min(alt / 1000, 1.5)
-    takeoff = round(alt_factor * 15) if dist > 3500 else round(alt_factor * 5)
+    balcony_bonus = round(math.cos(math.radians(diff)) * SCORING["balcony"]["amp"])
 
-    # Korekce směrovosti vysílače (HFCC azimut antény):
-    # stojíme-li v hlavním paprsku (+/-45°), bonus; mimo (>90°) paprsek, penalizace.
+    tk = SCORING["takeoff"]
+    alt_factor = min(alt / tk["altDivM"], tk["altCap"])
+    takeoff = round(alt_factor * tk["farMul"]) if dist > tk["farDistKm"] else round(alt_factor * tk["nearMul"])
+
     beam_adj = 0
     az_tx = st.get("azimuth") or 0
     if az_tx > 0:
@@ -805,25 +870,28 @@ def _score_one(st, qth, rx, active_now):
         delta = abs(brg_tx_to_me - az_tx)
         if delta > 180:
             delta = 360 - delta
-        beam_adj = 8 if delta <= 45 else (0 if delta <= 90 else -15)
+        bm = SCORING["beam"]
+        beam_adj = bm["nearBonus"] if delta <= bm["nearDeg"] else (
+            bm["midBonus"] if delta <= bm["midDeg"] else bm["farPenalty"])
 
+    a = SCORING["antenna"]
     antenna = 0
-    if rx == "whip":
-        if st["freq"] < 5000:
-            antenna = -18
-        elif 9000 <= st["freq"] <= 12000:
-            antenna = 12
-    elif rx == "loop" and st["freq"] < 7500:
-        antenna = 15
-    power = round(math.log10(st.get("kw", 100)) * 14)
+    if ant == "whip":
+        antenna = _ant_band(a["whip"], st["freq"])
+    elif ant == "wire":
+        antenna = _ant_band(a["wire"], st["freq"])
+    elif ant == "youloop":
+        antenna = _ant_band(a["youloop"], st["freq"])
+        if rx == "airspy":
+            antenna += a["youloopAirspyBonus"]
 
-    # Útlum vzdáleností (multi-hop) - shodné s PWA: bez něj dostávaly extrémně
-    # vzdálené stanice nereálně vysoké skóre. ~ -6 b / 1800 km nad 1000 km.
-    dist_penalty = -round((dist - 1000) / 1800 * 6) if dist > 1000 else 0
+    rx_bonus = SCORING["rxBonus"].get(rx, 0)
+    power = round(math.log10(max(st.get("kw") or 0, 1) / SCORING["power"]["centerKw"]) * SCORING["power"]["mul"])
 
-    # Denní absorpce D-vrstvy na nízkých pásmech (osvětlená trasa) - shodné s PWA
-    day_absorb = day_absorption(st["freq"], lat, lon, st["lat"], st["lon"],
-                                datetime.now(timezone.utc))
+    path_sunlit = solar_elevation((lat + st["lat"]) / 2, (lon + st["lon"]) / 2, now) > 0
+    prop_adj = propagation_adjust(st["freq"], bearing, sfi, kp, utc_hour, path_sunlit)
+    day_absorb = day_absorption(st["freq"], lat, lon, st["lat"], st["lon"], now)
+    skip = skip_term(st["freq"], dist)
 
     qrm_plus5 = next((o for o in active_now if o is not st
                       and o["freq"] == st["freq"] + 5 and o.get("kw", 0) >= st.get("kw", 0)), None)
@@ -832,23 +900,39 @@ def _score_one(st, qth, rx, active_now):
     co_channel = next((o for o in active_now if o is not st
                        and o["freq"] == st["freq"] and o.get("kw", 0) > st.get("kw", 0)), None)
 
+    q = SCORING["qrm"]
     tip = "AM, BW 3.5 kHz (čistý kanál)"
     qrm_penalty = 0
     if co_channel:
-        qrm_penalty = -25
+        qrm_penalty = q["coChannel"]
         tip = f"Silné krytí ({co_channel['station']} do {co_channel['end']} UTC). Čekej na vypnutí nosné!"
     elif qrm_plus5 and not qrm_minus5:
-        qrm_penalty = -8
+        qrm_penalty = q["adjacent"]
         tip = f"QRM z {st['freq'] + 5} kHz ({qrm_plus5['station']}) -> Přepni na LSB, BFO 00, BW 2.5 kHz!"
     elif qrm_minus5 and not qrm_plus5:
-        qrm_penalty = -8
+        qrm_penalty = q["adjacent"]
         tip = f"QRM z {st['freq'] - 5} kHz ({qrm_minus5['station']}) -> Přepni na USB, BFO 00, BW 2.5 kHz!"
+    if ant == "youloop" and q.get("loopHalves"):
+        qrm_penalty = round(qrm_penalty / 2)
 
-    score = max(5, min(99, 35 + balcony_bonus + takeoff + antenna + power + beam_adj + qrm_penalty + dist_penalty + day_absorb))
+    raw = (SCORING["base"] + rx_bonus
+           + balcony_bonus * w["balcony"]
+           + takeoff + beam_adj + antenna
+           + power * w["power"]
+           + (prop_adj + day_absorb) * w["prop"]
+           + skip * w["skip"]
+           + qrm_penalty)
+    cl = SCORING["clamp"]
+    score = max(cl["min"], min(cl["max"], round(raw)))
     return {"dist": dist, "bearing": bearing, "diff": round(diff), "score": score, "tip": tip}
 
 
-def score_stations(db, qth, rx="whip", hide_china=True, now_minutes=None, limit=10):
+def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
+                   hide_china=True, now_minutes=None, limit=10):
+    if sfi is None:
+        sfi = SCORING["spaceWeatherDefault"]["sfi"]
+    if kp is None:
+        kp = SCORING["spaceWeatherDefault"]["kp"]
     """Pětistupňové síto: azimutová maska, výška, anténa, výkon, QRM kolize."""
     now_dt = datetime.now(timezone.utc)
     if now_minutes is None:
@@ -870,13 +954,14 @@ def score_stations(db, qth, rx="whip", hide_china=True, now_minutes=None, limit=
             continue
         if hide_china and st.get("isChina"):
             continue
-        results.append({**st, **_score_one(st, qth, rx, active_all),
+        results.append({**st, **_score_one(st, qth, rx, ant, active_all, sfi, kp),
                          "mins_left": minutes_until(st.get("end", "23:59"), now_minutes)})
     results.sort(key=lambda r: r["score"], reverse=True)
     return results, active_all, now_minutes
 
 
-def collect_time_windows(db, active_all, now_minutes, hide_china, qth, rx, max_min=60):
+def collect_time_windows(db, active_all, now_minutes, hide_china, qth, rx, ant,
+                         sfi, kp, max_min=60):
     """⏱ Časová okna: jen budoucí události, které zatím neslyšíš -
     startující stanice (▶) a kanály, kde silný rušitel brzy vypne (🔓).
     ŠANCE se počítá proti budoucímu stavu éteru (po startu / po vypnutí
@@ -890,7 +975,7 @@ def collect_time_windows(db, active_all, now_minutes, hide_china, qth, rx, max_m
         if k in seen:
             return
         seen.add(k)
-        sc = _score_one(st, qth, rx, active_now)
+        sc = _score_one(st, qth, rx, ant, active_now, sfi, kp)
         items.append({"t": t, "typ": typ, "freq": st["freq"], "station": st["station"],
                       "kw": st.get("kw", 0), "score": sc["score"], "info": info})
 
@@ -930,14 +1015,14 @@ def collect_time_windows(db, active_all, now_minutes, hide_china, qth, rx, max_m
     return items
 
 
-def print_radar(results, windows, qth, rx, now_minutes, limit=12, sort="freq", chance_label=""):
+def print_radar(results, windows, qth, rx, ant, now_minutes, limit=12, sort="freq", chance_label=""):
     now = datetime.now(timezone.utc)
     utc_str = now.strftime("%H:%M")
     width = 94  # šířka tabulky cílů (jedno cíl = jeden řádek)
     sort_label = "dle kmitočtu" if sort == "freq" else "dle šance na úlovek"
     print("=" * width)
     print(f" QTH: {qth['name']} ({qth['alt']}m) | Azimut: {qth['az']}° "
-          f"({compass_dir(qth['az'])}) | RX: PL-330 + {ANTENNA_LABELS.get(rx, rx)}")
+          f"({compass_dir(qth['az'])}) | RX: {RX_LABELS.get(rx, rx)} + {ANTENNA_LABELS.get(ant, ant)}")
     print(f" Čas: {utc_str} UTC | Cílů: {len(results)} (řazeno {sort_label}"
           f"{'; filtr: ' + chance_label if chance_label else ''})")
     print("=" * width)
@@ -1002,17 +1087,27 @@ def main():
     ap.add_argument("--lon", type=float, help="délka stanoviště (jinak střed ČR)")
     ap.add_argument("--alt", type=int, help="nadmorská výška v m (default 300)")
     ap.add_argument("--az", type=int, help="azimut balkónu ve stupních (default 180)")
-    ap.add_argument("--rx", default="whip", choices=["whip", "wire", "loop"],
-                    help="profil antény (default: whip)")
+    ap.add_argument("--rx", default="pl330", choices=["pl330", "airspy", "ats4732"],
+                    help="přijímač (default: pl330)")
+    ap.add_argument("--ant", default="whip", choices=["whip", "wire", "youloop"],
+                    help="anténa (default: whip)")
+    ap.add_argument("--sfi", type=int, default=None,
+                    help="sluneční tok (default dle scoring.js)")
+    ap.add_argument("--kp", type=int, default=None,
+                    help="geomagnetický index Kp (default dle scoring.js)")
     ap.add_argument("--show-china", action="store_true",
                     help="nechat v radaru i čínské stanice")
     ap.add_argument("--limit", type=int, default=12, help="počet cílů ve výpisu (default 12)")
     ap.add_argument("--sort", default="freq", choices=["freq", "score"],
                     help="řazení cílů: freq = dle kmitočtu (default), score = dle šance")
     ap.add_argument("--chance", default="top", choices=["all", "top", "mid", "low"],
-                    help="filtr skóre jako v PWA: top = nejlepší tercil (default), "
-                         "all = vše nad práh 30")
+                    help="filtr skóre dle pevných hranic jako v PWA: top = Silné, "
+                         "mid = Slyšitelné, low = Slabé, all = vše")
     args = ap.parse_args()
+    if args.sfi is None:
+        args.sfi = SCORING["spaceWeatherDefault"]["sfi"]
+    if args.kp is None:
+        args.kp = SCORING["spaceWeatherDefault"]["kp"]
 
     qth = dict(DEFAULT_QTH)
     if args.lat is not None or args.lon is not None:
@@ -1030,36 +1125,33 @@ def main():
                   "Zadej svoje QTH: --lat 50.08 --lon 14.42 --alt 300 --az 180")
         db, source = load_schedule(args)
         results, active, now_minutes = score_stations(
-            db, qth, rx=args.rx, hide_china=not args.show_china, limit=args.limit)
+            db, qth, rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp,
+            hide_china=not args.show_china, limit=args.limit)
         if args.sort == "freq":
             results.sort(key=lambda r: (r["freq"], -r["score"]))
         else:
             results.sort(key=lambda r: (-r["score"], r["freq"]))
-        # Stejná logika jako PWA: pod 30 % šance nezobrazujeme,
-        # default = nejlepší tercil (rank-based, remízy nerozbíjejí hranice)
-        viable = [r for r in results if r["score"] >= 30]
-        by_score = sorted(viable, key=lambda r: -r["score"])
-        n3 = math.ceil(len(by_score) / 3) if by_score else 0
-        top_keys = {station_key(r) for r in by_score[:n3]}
-        mid_keys = {station_key(r) for r in by_score[n3:2 * n3]}
-        s_top = by_score[n3 - 1]["score"] if n3 else 0
+        # Stejné pevné hranice jako PWA: Silné >= hi, Slyšitelné mid..hi, Slabé < mid.
+        hi = SCORING["boundaries"]["hi"]
+        mid = SCORING["boundaries"]["mid"]
         if args.chance == "top":
-            shown = [r for r in viable if station_key(r) in top_keys]
-            chance_label = f"nejlepší tercil ≥ {s_top} %"
+            shown = [r for r in results if r["score"] >= hi]
+            chance_label = f"Silné (skóre ≥ {hi})"
         elif args.chance == "mid":
-            shown = [r for r in viable if station_key(r) in mid_keys]
-            chance_label = f"střední tercil (do {s_top} %)"
+            shown = [r for r in results if mid <= r["score"] < hi]
+            chance_label = f"Slyšitelné ({mid}–{hi})"
         elif args.chance == "low":
-            shown = [r for r in viable
-                     if station_key(r) not in top_keys and station_key(r) not in mid_keys]
-            chance_label = "spodní tercil"
+            shown = [r for r in results if r["score"] < mid]
+            chance_label = f"Slabé (skóre < {mid})"
         else:
-            shown = viable
-            chance_label = "vše (šance ≥ 30 %)"
+            shown = results
+            chance_label = "vše"
         windows = collect_time_windows(db, active, now_minutes,
-                                       hide_china=not args.show_china, qth=qth, rx=args.rx)
+                                       hide_china=not args.show_china, qth=qth,
+                                       rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp)
         print(f"[i] Zdroj dat: {source} ({len(db)} záznamů)")
-        print_radar(shown, windows, qth, args.rx, now_minutes, args.limit, args.sort, chance_label)
+        print_radar(shown, windows, qth, args.rx, args.ant, now_minutes,
+                    args.limit, args.sort, chance_label)
         return 0
 
     # default: --sync (harvest: HFCC + AOKI + EiBi podle --source)

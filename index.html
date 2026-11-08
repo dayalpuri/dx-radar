@@ -738,6 +738,9 @@
 
 <div class="toast" id="toast" data-i18n="toast_copied">Zkopírováno do schránky (Markdown)!</div>
 
+<!-- Jediný zdroj laditelných konstant skóre; stejný soubor čte i eibi_sync.py (CLI) -->
+<script src="scoring.js"></script>
+
 <footer style="max-width:860px; margin:28px auto 16px; padding:14px 16px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; line-height:1.6; text-align:center;">
   <span data-i18n="footer_made">Nekomerční hobby projekt · data: HFCC, AOKI, EiBi · vytvořeno s pomocí AI · bez záruky</span>
   · <a href="legal.html" style="color:var(--accent); text-decoration:none;" data-i18n="footer_legal">Licence, zdroje dat a soukromí</a>
@@ -1020,8 +1023,10 @@ function safeUrl(u) {
 // Barevná třída skóre dle tercilů dané chvíle (zelená = top ⅓, amber = střední, tlumená = spodní).
 // Tercily se počítají z živého rozdělení, takže barvy sedí i po změně vah/antény/přijímače.
 // Pevné hranice skóre z balkonové kalibrace (poledne+večer): silné / slyšitelné / slabé.
-const SCORE_HI = 68, SCORE_MID = 50;
+const SCORE_HI = SCORING.boundaries.hi, SCORE_MID = SCORING.boundaries.mid;
 function scoreClass(s) { return s >= SCORE_HI ? 'sc-hi' : s >= SCORE_MID ? 'sc-mid' : 'sc-lo'; }
+// Anténní zisk dle pásma: první práh, pod který freq spadá (viz scoring.js → antenna)
+function antBand(buckets, f) { for (const [lim, val] of buckets) if (f < lim) return val; return 0; }
 
 // Krátký rozklad skóre do karty – jen nenulové složky, se znaménkem.
 const PART_KEYS = { balcony: 'p_balcony', beam: 'p_beam', ant: 'p_ant', rx: 'p_rx',
@@ -1102,16 +1107,17 @@ function isTimeActive(startStr, endStr, nowMinutes) {
 
 // 4. SLUNEČNÍ A GEOMAGNETICKÁ TELEMETRIE (NOAA SWPC)
 //    Při online připojení stáhne SFI a Kp; jinak použije klidový odhad (142 / 2).
-const SPACE_WX = { sfi: 142, kp: 2, live: false };
+const SPACE_WX = { sfi: SCORING.spaceWeatherDefault.sfi, kp: SCORING.spaceWeatherDefault.kp, live: false };
 
 function mufEstimate(sfi, utcHours, pathSunlit = false) {
-  // Empirická heuristika: noční MUF ~ 6 + 0.09*SFI, denní +8 MHz (vrstva F2 nad Evropou).
+  // Empirická heuristika: noční MUF ~ const + sfiMul*SFI, denní +dayBoost MHz (vrstva F2).
   // pathSunlit: když je prostředek trasy osvětlený Sluncem (např. ranní otevření na východ),
-  // platí denní MUF i mimo lokální okno 8–16 UTC. Bez něj by model srážel reálné ranní
-  // úlovky na 15–17 MHz (gray-line na východ je osvětlený dřív než naše lokální poledne).
-  const base = 6 + 0.09 * sfi;
-  const daytime = (utcHours >= 8 && utcHours <= 16) || pathSunlit;
-  return Math.round(daytime ? base + 8 : base);
+  // platí denní MUF i mimo lokální okno. Bez něj by model srážel reálné ranní úlovky na
+  // 15–17 MHz (gray-line na východ je osvětlený dřív než naše lokální poledne).
+  const m = SCORING.muf;
+  const base = m.const + m.sfiMul * sfi;
+  const daytime = (utcHours >= m.dayStartH && utcHours <= m.dayEndH) || pathSunlit;
+  return Math.round(daytime ? base + m.dayBoost : base);
 }
 
 function geomagLabel(kp) {
@@ -1139,25 +1145,27 @@ function solarElevation(lat, lon, date) {
 // Denní absorpce D-vrstvy: osvětlená trasa pod ~10 MHz je silně tlumená.
 // Toto je hlavní důvod, proč dřív svítily nereálné dálkové tropické stanice v poledne.
 function dayAbsorption(freq, myLat, myLon, stLat, stLon, date) {
-  if (freq >= 10000) return 0;
+  const da = SCORING.dayAbsorption;
+  if (freq >= da.freqCeilKHz) return 0;
   const midLat = (myLat + stLat) / 2;
   const midLon = (myLon + stLon) / 2;
-  const sunEl = solarElevation(midLat, midLon, date); // osvětlení prostředku trasy
-  if (sunEl <= 0) return 0;                            // noční trasa = bez D-absorpce
-  const freqFactor = (10000 - freq) / 10000;          // 0..1, čím níž, tím hůř
-  return -Math.round(Math.sin(sunEl * Math.PI / 180) * freqFactor * 40);
+  const sunEl = solarElevation(midLat, midLon, date);      // osvětlení prostředku trasy
+  if (sunEl <= 0) return 0;                                // noční trasa = bez D-absorpce
+  const freqFactor = (da.freqCeilKHz - freq) / da.freqCeilKHz; // 0..1, čím níž, tím hůř
+  return -Math.round(Math.sin(sunEl * Math.PI / 180) * freqFactor * da.maxPenalty);
 }
 
 function propagationAdjust(freq, bearing, sfi, kp, utcHours, pathSunlit = false) {
   // Frekvenční okno LUF–MUF: co je nad MUF, vyletí do vesmíru (-35); hraniční -10.
+  const p = SCORING.prop;
   const muf = mufEstimate(sfi, utcHours, pathSunlit);
   let adj = 0;
-  if (freq > muf * 1000 + 3000) adj -= 35;
-  else if (freq > muf * 1000 - 3000) adj -= 10;
-  // Polární/Aurorální absorpce při Kp >= 5 postihuje trasy severním sektorem (300°–60°)
-  if (kp >= 5) {
-    const inNorth = bearing >= 300 || bearing <= 60;
-    if (inNorth) adj -= 20;
+  if (freq > muf * 1000 + p.mufMarginKHz) adj += p.aboveMufPenalty;
+  else if (freq > muf * 1000 - p.mufMarginKHz) adj += p.nearMufPenalty;
+  // Polární/Aurorální absorpce při Kp >= auroralKp postihuje trasy severním sektorem
+  if (kp >= p.auroralKp) {
+    const inNorth = bearing >= p.auroralFromDeg || bearing <= p.auroralToDeg;
+    if (inNorth) adj += p.auroralPenalty;
   }
   return adj;
 }
@@ -1249,19 +1257,20 @@ function bandKey(freq) {
 // Práh mrtvé zóny roste s frekvencí; nad ním navíc multi-hop útlum (na prut/portativ
 // se dálkové skoky těžko chytají). Vrací ZÁPORNÉ body (0 = bez penalizace).
 function skipTerm(freq, dist) {
+  const sk = SCORING.skip;
   const fMHz = freq / 1000;
-  const floor = Math.min(Math.max((fMHz - 7) * 300, 0), 4000); // km, strop 4000
+  const floor = Math.min(Math.max((fMHz - sk.pivotMHz) * sk.slopeKmPerMHz, 0), sk.floorCapKm);
   let s = 0;
-  if (dist < floor) s -= Math.round((floor - dist) / floor * 30); // v mrtvé zóně
-  if (dist > 3000) s -= Math.round((dist - 3000) / 2000 * 8);     // multi-hop útlum
+  if (dist < floor) s -= Math.round((floor - dist) / floor * sk.nearPenaltyMax);       // v mrtvé zóně
+  if (dist > sk.farStartKm) s -= Math.round((dist - sk.farStartKm) / sk.farDivKm * sk.farPenaltyMul); // multi-hop útlum
   return s;
 }
 
 // Citlivost přijímače (plochý posun; Airspy navíc zprovozní pasivní YouLoop)
-const RX_BONUS = { pl330: 0, airspy: 12, ats4732: -6 };
+const RX_BONUS = SCORING.rxBonus;
 // Výchozí váhy sliderů (0–2×); přepisuje je uživatel a ukládají se lokálně
-const WEIGHTS = { balcony: 1.0, power: 1.2, skip: 1.0, prop: 1.5 };
-const SCORE_BASE = 50;
+const WEIGHTS = { ...SCORING.weightsDefault };
+const SCORE_BASE = SCORING.base;
 
 function scoreStation(st, env, activeNow) {
   const w = env.weights || WEIGHTS;
@@ -1271,11 +1280,12 @@ function scoreStation(st, env, activeNow) {
   // A. Kardioidní maska balkónu: rozdíl úhlů (0° = přímý výhled, 180° = za budovou)
   let angleDiff = Math.abs(bearing - env.balconyAz);
   if (angleDiff > 180) angleDiff = 360 - angleDiff;
-  const balconyBonus = Math.round(Math.cos(toRad(angleDiff)) * 25);
+  const balconyBonus = Math.round(Math.cos(toRad(angleDiff)) * SCORING.balcony.amp);
 
-  // B. Efekt nadmořské výšky (nízký vyzařovací úhel pomáhá stanicím nad 3500 km)
-  const altFactor = Math.min(env.alt / 1000, 1.5);
-  const takeOffBonus = dist > 3500 ? Math.round(altFactor * 15) : Math.round(altFactor * 5);
+  // B. Efekt nadmořské výšky (nízký vyzařovací úhel pomáhá dálkovým stanicím)
+  const tk = SCORING.takeoff;
+  const altFactor = Math.min(env.alt / tk.altDivM, tk.altCap);
+  const takeOffBonus = dist > tk.farDistKm ? Math.round(altFactor * tk.farMul) : Math.round(altFactor * tk.nearMul);
 
   // B2. Korekce směrovosti vysílače (HFCC azimut antény)
   let beamAdj = 0;
@@ -1283,27 +1293,26 @@ function scoreStation(st, env, activeNow) {
     const brgTxToMe = calcGeodesic(st.lat, st.lon, env.myLat, env.myLon).bearing;
     let delta = Math.abs(brgTxToMe - st.azimuth);
     if (delta > 180) delta = 360 - delta;
-    beamAdj = delta <= 45 ? 8 : (delta <= 90 ? 0 : -15);
+    const bm = SCORING.beam;
+    beamAdj = delta <= bm.nearDeg ? bm.nearBonus : (delta <= bm.midDeg ? bm.midBonus : bm.farPenalty);
   }
 
   // C. Profil antény × pásmo (prut 60cm / 7m drát na cívce / pasivní YouLoop)
   let antennaBonus = 0;
-  if (env.ant === 'whip') {
-    // Prut je elektricky delší (účinnější) s rostoucí frekvencí, proto ≥15 MHz
-    // nemá dostávat menší bonus než 9–15 MHz; ranní high-band data to potvrdila.
-    antennaBonus = f < 5000 ? -18 : f < 9000 ? -6 : f < 15000 ? 10 : 6;
-  } else if (env.ant === 'wire') {               // širokopásmový zisk, nejvíc dole/středně
-    antennaBonus = f < 5000 ? 8 : f < 10000 ? 12 : f < 18000 ? 4 : 0;
-  } else if (env.ant === 'youloop') {            // pasivní, bez zisku – citlivý null na QRM
-    antennaBonus = f < 7000 ? -15 : f < 15000 ? -6 : -4;
-    if (env.rx === 'airspy') antennaBonus += 14; // citlivý SDR pasivní loop zprovozní
+  if (env.ant === 'whip') {              // prut: účinnější s rostoucí frekvencí
+    antennaBonus = antBand(SCORING.antenna.whip, f);
+  } else if (env.ant === 'wire') {       // širokopásmový zisk, nejvíc dole/středně
+    antennaBonus = antBand(SCORING.antenna.wire, f);
+  } else if (env.ant === 'youloop') {    // pasivní, bez zisku – citlivý null na QRM
+    antennaBonus = antBand(SCORING.antenna.youloop, f);
+    if (env.rx === 'airspy') antennaBonus += SCORING.antenna.youloopAirspyBonus; // citlivý SDR loop zprovozní
   }
 
   // C2. Citlivost přijímače (PL-330 baseline / Airspy HF+ / ATS-4732)
   const rxBonus = RX_BONUS[env.rx] != null ? RX_BONUS[env.rx] : 0;
 
   // D. Výkon vysílače vycentrovaný na 100 kW (100 kW = 0; neslouží jako konstantní offset)
-  const powerBonus = Math.round(Math.log10(Math.max(st.kw, 1) / 100) * 14);
+  const powerBonus = Math.round(Math.log10(Math.max(st.kw, 1) / SCORING.power.centerKw) * SCORING.power.mul);
   // E. ionosféra (SFI/Kp z NOAA) + denní D-absorpce = propagační člen (jeden slider)
   const midSunlit = solarElevation((env.myLat + st.lat) / 2, (env.myLon + st.lon) / 2, env.now || new Date()) > 0;
   const propAdj = propagationAdjust(f, bearing, SPACE_WX.sfi, SPACE_WX.kp, env.utcHour, midSunlit);
@@ -1324,15 +1333,15 @@ function scoreStation(st, env, activeNow) {
   let qrmFlag = false;
 
   if (coChannel) {
-    qrmPenalty = -25;
+    qrmPenalty = SCORING.qrm.coChannel;
     qrmFlag = true;
     pl330Tip = tr('tip_cover', { st: coChannel.station, end: coChannel.end });
   } else if (qrmPlus5 && !qrmMinus5) {
-    qrmPenalty = -8;
+    qrmPenalty = SCORING.qrm.adjacent;
     qrmFlag = true;
     pl330Tip = tr('tip_qrm_lsb', { f: f + 5, st: qrmPlus5.station });
   } else if (qrmMinus5 && !qrmPlus5) {
-    qrmPenalty = -8;
+    qrmPenalty = SCORING.qrm.adjacent;
     qrmFlag = true;
     pl330Tip = tr('tip_qrm_usb', { f: f - 5, st: qrmMinus5.station });
   } else if (isLoop) {
@@ -1341,7 +1350,7 @@ function scoreStation(st, env, activeNow) {
     pl330Tip = tr('tip_weak', { rx: rxName });
   }
   // YouLoop má směrový null – potlačí QRM na polovinu
-  if (isLoop) qrmPenalty = Math.round(qrmPenalty / 2);
+  if (isLoop && SCORING.qrm.loopHalves) qrmPenalty = Math.round(qrmPenalty / 2);
 
   const raw = SCORE_BASE + rxBonus
     + balconyBonus * w.balcony
@@ -1350,7 +1359,7 @@ function scoreStation(st, env, activeNow) {
     + (propAdj + dayAbsorb) * w.prop
     + skip * w.skip
     + qrmPenalty;
-  const score = Math.max(5, Math.min(99, Math.round(raw)));
+  const score = Math.max(SCORING.clamp.min, Math.min(SCORING.clamp.max, Math.round(raw)));
   return {
     dist, bearing, angleDiff: Math.round(angleDiff), score, pl330Tip, qrmFlag,
     parts: { balcony: Math.round(balconyBonus * w.balcony), takeoff: takeOffBonus, beam: beamAdj,
@@ -2528,8 +2537,8 @@ document.getElementById('minScore').addEventListener('input', () => {
   syncWeightLabels(); saveWeights(); evaluateStations();
 });
 document.getElementById('btnWeightsReset').addEventListener('click', () => {
-  WEIGHTS.balcony = 1.0; WEIGHTS.power = 1.2; WEIGHTS.skip = 1.0; WEIGHTS.prop = 1.5;
-  document.getElementById("minScore").value = 50;
+  Object.assign(WEIGHTS, SCORING.weightsDefault);
+  document.getElementById("minScore").value = SCORING.boundaries.mid;
   initTuningUI(); saveWeights(); evaluateStations();
 });
 document.getElementById('btnWeightsCopy').addEventListener('click', () => {
