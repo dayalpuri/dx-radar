@@ -306,6 +306,51 @@ def minutes_until(end, now_minutes):
     return (e - now_minutes) % (24 * 60)
 
 
+def _hhmm(s):
+    h, m = map(int, s.split(':'))
+    return h * 60 + m
+
+
+def is_all_day(st):
+    """Celodenní vysílání (00:00-24:00, 00:00-23:59, start == konec) nikdy „nekončí"."""
+    s, e = _hhmm(st.get("start", "00:00")), _hhmm(st.get("end", "23:59"))
+    return s % 1440 == e % 1440 or (s == 0 and e >= 1439)
+
+
+def minutes_left(st, now_minutes):
+    """Minuty do konce vysílání; celodenní = inf (žádné ⏹ ani 🔓 okno). Jako PWA minutesLeft()."""
+    if is_all_day(st):
+        return math.inf
+    return minutes_until(st.get("end", "23:59"), now_minutes) or 1440
+
+
+def _bl_matches(p, st):
+    """Vzor VELKÝMI = kód země (přesně); jinak celé slovo/fráze v názvu (jako PWA)."""
+    if p == p.upper() and re.search(r"[A-Z]", p) and st.get("country", "") == p:
+        return True
+    return re.search(rf"(^|[^a-z0-9]){re.escape(p.lower())}($|[^a-z0-9])",
+                     (st.get("station") or "").lower()) is not None
+
+
+def is_blacklisted(st, patterns):
+    return any(_bl_matches(p, st) for p in patterns or ())
+
+
+def prefer_record(a, b):
+    """Totéž vysílání ze dvou zdrojů: přesná poloha (ne approxLoc) má přednost, pak vyšší výkon."""
+    if bool(a.get("approxLoc")) != bool(b.get("approxLoc")):
+        return b if a.get("approxLoc") else a
+    return b if b.get("kw", 0) > a.get("kw", 0) else a
+
+
+def dedup_active(records):
+    dedup = {}
+    for st in records:
+        k = station_key(st)
+        dedup[k] = prefer_record(dedup[k], st) if k in dedup else st
+    return list(dedup.values())
+
+
 # Běžné zkratky v názvech stanic: EiBi píše "R.ROMANIA INT.",
 # HFCC/AOKI "Radio Romania International" - po rozbalení je to tatáž stanice.
 _STATION_ALIAS = {
@@ -573,7 +618,9 @@ def parse_hfcc_schedule(text, sites, brc, langs):
             continue
         site_name, lat, lon = sites[loc]
         kw = int(powr_s) if powr_s.isdigit() and int(powr_s) > 0 else 100
-        azimuth = int(azim_s) if azim_s.isdigit() else 0
+        # HFCC 360 nepoužívá; 0 má v datech skoro jen nesměrové typy antén (7xx/9xx)
+        # -> 0 bereme jako všesměrovou (None), ne jako anténu mířící na sever.
+        azimuth = int(azim_s) if azim_s.isdigit() and int(azim_s) > 0 else None
         tokens = tail.split()
         adm = tokens[0] if tokens else ""
         brc_code = tokens[1] if len(tokens) > 1 else (tokens[0] if tokens else "")
@@ -709,7 +756,7 @@ def parse_aoki_txt(text):
         else:
             continue
         kw = int(powr_s) if powr_s.isdigit() and int(powr_s) > 0 else 100
-        azimuth = int(azi_s) if azi_s.isdigit() else 0  # 'ND' -> 0 (nesměrové)
+        azimuth = int(azi_s) if azi_s.isdigit() else None  # 'ND' = nesměrová; 0 = sever
         days = convert_days(seg(line, "Su-W-Sa"))
         is_china = adm in ("CHN", "CN") or any(p in station for p in CHINA_NAME_PATTERNS)
         records.append({
@@ -849,55 +896,27 @@ def save_json(records, out_json, sources=None):
 
 
 def load_schedule(args):
-    """DB pro --now: všechny dostupné zdroje sloučené dohromady -
-    schedule.json z --sync (HFCC + AOKI) plus sked_eibi.csv (EiBi), dedup
-    dle freq+start+end (priorita: co je dřív v seznamu, to vyhrává).
-    --json/--csv úplně přebíjí (jeden explicitní zdroj)."""
+    """DB pro --now - stejná data jako PWA: schedule.json (HFCC + AOKI),
+    s --eibi navíc schedule_eibi.json (doplněk s hrubou polohou, jako přepínač
+    „+ EiBi" v aplikaci). --json/--csv úplně přebíjí (jeden explicitní zdroj)."""
     if args.json:
         with open(args.json, encoding="utf-8") as f:
             return json.load(f), args.json
     if args.csv:
         return parse_eibi_csv(args.csv), args.csv
 
-    import os
-    parts, labels = [], []
-    js = None
-    for cand in (DEFAULT_OUT_JSON,):
+    db, labels = [], []
+    files = [DEFAULT_OUT_JSON] + (["schedule_eibi.json"] if args.eibi else [])
+    for path in files:
         try:
-            with open(cand, encoding="utf-8") as f:
-                js = json.load(f)
-            labels.append(cand)
-            break
-        except OSError:
-            pass
-    if js:
-        parts.append(js)
-    # EiBi CSV přidat jen tehdy, když už není součástí JSONu z --sync
-    meta_sources = []
-    meta_path = DEFAULT_OUT_JSON.rsplit(".", 1)[0] + ".meta.json"
-    try:
-        with open(meta_path, encoding="utf-8") as f:
-            meta_sources = json.load(f).get("sources", [])
-    except (OSError, ValueError):
-        pass
-    if "eibi" not in meta_sources:
-        csv_path = "sked_eibi.csv" if os.path.exists("sked_eibi.csv") else None
-        if not csv_path and not args.offline:
-            import tempfile
-            tmp = os.path.join(tempfile.gettempdir(), "sked_eibi.csv")
-            got = download_eibi(tmp)
-            csv_path = got[0] if got else None
-        if csv_path:
-            parts.append(parse_eibi_csv(csv_path))
-            labels.append("sked_eibi.csv (EiBi)")
-    if parts:
-        db = merge_schedules(*parts)
-        total = sum(len(p) for p in parts)
-        if len(parts) > 1 and total != len(db):
-            print(f"[+] Sloučeno {len(parts)} zdrojů: {total} -> {len(db)} záznamů "
-                  f"(odstraněno {total - len(db)} duplicit).")
+            with open(path, encoding="utf-8") as f:
+                db += json.load(f)
+            labels.append(path)
+        except (OSError, ValueError):
+            print(f"[!] {path} nenačten - spusť nejdřív --sync.")
+    if db:
         return db, " + ".join(labels)
-    print("[!] Data EiBi nedostupná - používám vestavěný vzorek (dnešní večer 2026).")
+    print("[!] Rozvrh nedostupný - používám vestavěný vzorek (dnešní večer 2026).")
     return SAMPLE_DB, "vestavěný vzorek"
 
 
@@ -908,12 +927,12 @@ ANTENNA_LABELS = {"whip": "Prut 60cm", "wire": "7m drát na cívce", "youloop": 
 RX_LABELS = {"pl330": "Tecsun PL-330", "airspy": "Airspy HF+ Discovery", "ats4732": "Mini ATS-4732"}
 
 
-def passes_days(st, now_dt):
-    """HFCC pole DAYS ('1234567' = Po-Ne); prázdné = vysílá denně."""
+def passes_days(st, now_dt, day=None):
+    """Pole DAYS ('1234567' = Po-Ne); prázdné = vysílá denně. day přebije den z now_dt."""
     days = st.get("days", "")
     if not days:
         return True
-    return str(now_dt.isoweekday()) in days  # 1=Po ... 7=Ne
+    return str(day or now_dt.isoweekday()) in days  # 1=Po ... 7=Ne
 
 
 def solar_elevation(lat, lon, dt):
@@ -1008,8 +1027,8 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp):
     takeoff = jround(alt_factor * tk["farMul"]) if dist > tk["farDistKm"] else jround(alt_factor * tk["nearMul"])
 
     beam_adj = 0
-    az_tx = st.get("azimuth") or 0
-    if az_tx > 0:
+    az_tx = st.get("azimuth")
+    if az_tx is not None:  # None = všesměrová anténa; 0 = míří na sever
         brg_tx_to_me = calc_geodesic(st["lat"], st["lon"], lat, lon)[1]
         delta = abs(brg_tx_to_me - az_tx)
         if delta > 180:
@@ -1072,8 +1091,9 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp):
 
 
 def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
-                   hide_china=True, now_minutes=None, limit=10):
-    """Pětistupňové síto: azimutová maska, výška, anténa, výkon, QRM kolize."""
+                   blacklist=(), now_minutes=None):
+    """Stejný pipeline jako PWA evaluateStations(): aktivní teď + dnes + mimo blacklist,
+    deduplikace, pak skóre proti tomuto stavu éteru."""
     if sfi is None:
         sfi = SCORING["spaceWeatherDefault"]["sfi"]
     if kp is None:
@@ -1082,35 +1102,27 @@ def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
     if now_minutes is None:
         now_minutes = now_dt.hour * 60 + now_dt.minute
 
-    active_all = [st for st in db
-                  if is_time_active(st.get("start", "00:00"), st.get("end", "23:59"), now_minutes)]
-    # Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech nejsilnější záznam,
-    # aby se jedno vysílání nezdvojovalo a nekazilo QRM analýzu (falešná krytí).
-    dedup = {}
-    for st in active_all:
-        k = station_key(st)
-        if k not in dedup or st.get("kw", 0) > dedup[k].get("kw", 0):
-            dedup[k] = st
-    active_all = list(dedup.values())
-    results = []
-    for st in active_all:
-        if not passes_days(st, now_dt):
-            continue
-        if hide_china and st.get("isChina"):
-            continue
-        results.append({**st, **_score_one(st, qth, rx, ant, active_all, sfi, kp),
-                         "mins_left": minutes_until(st.get("end", "23:59"), now_minutes)})
+    # Dny i blacklist PŘED deduplikací: stanice, která dnes nevysílá (nebo je skrytá),
+    # nesmí strhávat QRM ostatním ani vytlačit dnešní záznam téže stanice.
+    active_all = dedup_active([
+        st for st in db
+        if is_time_active(st.get("start", "00:00"), st.get("end", "23:59"), now_minutes)
+        and passes_days(st, now_dt) and not is_blacklisted(st, blacklist)])
+    results = [{**st, **_score_one(st, qth, rx, ant, active_all, sfi, kp),
+                "mins_left": minutes_left(st, now_minutes)} for st in active_all]
     results.sort(key=lambda r: r["score"], reverse=True)
     return results, active_all, now_minutes
 
 
-def collect_time_windows(db, active_all, now_minutes, hide_china, qth, rx, ant,
+def collect_time_windows(db, active_all, now_minutes, blacklist, qth, rx, ant,
                          sfi, kp, max_min=60):
     """⏱ Časová okna: jen budoucí události, které zatím neslyšíš -
     startující stanice (▶) a kanály, kde silný rušitel brzy vypne (🔓).
     ŠANCE se počítá proti budoucímu stavu éteru (po startu / po vypnutí
     rušitele), takže okna jdou řadit i podle pravděpodobnosti úlovku."""
     now_dt = datetime.now(timezone.utc)
+    today = now_dt.isoweekday()
+    tomorrow = today % 7 + 1
     items = []
     seen = set()
 
@@ -1125,7 +1137,7 @@ def collect_time_windows(db, active_all, now_minutes, hide_china, qth, rx, ant,
 
     # a) Kanál, kde silný rušitel brzy vypne a vyčistí frekvenci slabšímu DXovi
     for st in db:
-        if hide_china and st.get("isChina"):
+        if is_blacklisted(st, blacklist):
             continue
         if not is_time_active(st.get("start", "00:00"), st.get("end", "23:59"), now_minutes):
             continue
@@ -1137,24 +1149,28 @@ def collect_time_windows(db, active_all, now_minutes, hide_china, qth, rx, ant,
             continue
         if station_key(stronger) == station_key(st):
             continue  # stejná stanice (duplikát z jiného zdroje), ne rušitel
-        clear_in = minutes_until(stronger.get("end", "23:59"), now_minutes)
+        clear_in = minutes_left(stronger, now_minutes)  # celodenní rušitel = inf, nevypne
         if clear_in <= max_min:
             # šance až po vyčištění kanálu: silnější rušitelé už nevysílají
             cleaned = [o for o in active_all
                        if not (o is not st and o["freq"] == st["freq"] and o.get("kw", 0) > st.get("kw", 0))]
             push(st, clear_in, "🔓",
                  f"od {stronger['end']} UTC čistý kanál (vypíná {stronger['station']})", cleaned)
-    # b) Stanice, které právě nejdou, ale startují v příští hodině
+    # b) Stanice, které právě nejdou, ale startují v příští hodině.
+    # Co už teď na stejném kmitočtu vysílá (navazující blok), není „nový start".
+    seen.update(station_key(st) for st in active_all)
     for st in db:
-        if hide_china and st.get("isChina"):
+        if is_blacklisted(st, blacklist):
             continue
         if is_time_active(st.get("start", "00:00"), st.get("end", "23:59"), now_minutes):
             continue
-        if not passes_days(st, now_dt):
-            continue
         starts_in = minutes_until(st.get("start", "00:00"), now_minutes)
-        if starts_in <= max_min:
-            push(st, starts_in, "▶", f"start v {st.get('start', '?')} UTC", active_all)
+        if starts_in > max_min:
+            continue
+        # start po půlnoci UTC = zítřejší den vysílání
+        if not passes_days(st, now_dt, tomorrow if now_minutes + starts_in >= 1440 else today):
+            continue
+        push(st, starts_in, "▶", f"start v {st.get('start', '?')} UTC", active_all)
     items.sort(key=lambda x: x["t"])
     return items
 
@@ -1163,6 +1179,7 @@ def print_radar(results, windows, qth, rx, ant, now_minutes, limit=12, sort="fre
     now = datetime.now(timezone.utc)
     utc_str = now.strftime("%H:%M")
     width = 94  # šířka tabulky cílů (jedno cíl = jeden řádek)
+    hi, mid = SCORING["boundaries"]["hi"], SCORING["boundaries"]["mid"]
     sort_label = "dle kmitočtu" if sort == "freq" else "dle šance na úlovek"
     print("=" * width)
     print(f" QTH: {qth['name']} ({qth['alt']}m) | Azimut: {qth['az']}° "
@@ -1174,16 +1191,16 @@ def print_radar(results, windows, qth, rx, ant, now_minutes, limit=12, sort="fre
     # 🎯 CÍLE TEĎ nejdřív - to je to, co hráč na balkoně řeší; časová okna až pod tím
     print(f" 🎯 CÍLE TEĎ (řazeno {sort_label}):")
     print(f"{'MK':<4} {'NR':>3} {'FRQ':>7} {'STANICE':<25} {'ZEM':<3} {'VÝKON':>7} "
-          f"{'KM':>5} {'AZIMUT':>7} {'±':>5} {'%':>4}  KONEC")
+          f"{'KM':>5} {'AZIMUT':>7} {'±':>5} {'SK':>4}  KONEC")
     print("-" * width)
     for i, r in enumerate(results[:limit], 1):
-        mark = "[★]" if r["score"] >= 75 else ("[ +]" if r["score"] >= 60 else "[  ]")
+        mark = "[★]" if r["score"] >= hi else ("[ +]" if r["score"] >= mid else "[  ]")
         name = r["station"] if len(r["station"]) <= 25 else r["station"][:24] + "…"
         ends = (f"⏹{r['end']} (zb.{r['mins_left']}m)" if r["mins_left"] <= 60
                 else r["end"])
         print(f"{mark:<4} {i:>3} {r['freq']:>4}kHz {name:<25} {r.get('country', '?'):<3} "
               f"{r.get('kw', '?'):>4}kW {r['dist']:>5} {r['bearing']:>3}°{compass_dir(r['bearing']):<3} "
-              f"{r['diff']:>4}° {r['score']:>3}%  {ends}")
+              f"{r['diff']:>4}° {r['score']:>4}  {ends}")
         # jen akční tipy (QRM kolize, krytí kanálu) - zbytek je stejná rada AM/BW
         if not r["tip"].startswith("AM, BW"):
             print(f"{'':>4} └─ {r['tip']}")
@@ -1194,17 +1211,18 @@ def print_radar(results, windows, qth, rx, ant, now_minutes, limit=12, sort="fre
     # ⏱ ČASOVÁ OKNA: budoucí události (starty, uvolňující se kanály)
     if windows:
         print(" ⏱ ČASOVÁ OKNA (příštích 60 minut) - co zatím neslyšíš:")
-        print(f"{'ZA':>5}  T {'FRQ':>4}kHz {'STANICE':<25} {'kW':>5} {'%':>4}  INFO")
+        print(f"{'ZA':>5}  T {'FRQ':>4}kHz {'STANICE':<25} {'kW':>5} {'SK':>4}  INFO")
         for w in windows[:30]:  # nejbližších 30, ať to nepřeteče obrazovku
             name = w["station"] if len(w["station"]) <= 25 else w["station"][:24] + "…"
             # T: > startuje, ! kanál se uvolní (emoji by rozhodila zarovnání)
             typ = ">" if w["typ"] == "▶" else "!"
             print(f"{str(w['t']) + 'm':>5}  {typ} {w['freq']:>4}kHz {name:<25} "
-                  f"{w['kw']:>5} {w['score']:>4}%  {w['info']}")
+                  f"{w['kw']:>5} {w['score']:>4}  {w['info']}")
         if len(windows) > 30:
             print(f"   … a dalších {len(windows) - 30} událostí v příští hodině")
         print("=" * width)
-    print("Legenda: [★] šance ≥75 % | [ +] ≥60 % | ⏹ končí do hodiny | └─ akční tip proti QRM")
+    print(f"Legenda: SK = skóre (heuristika 5–99, ne %) | [★] Silné ≥{hi} | [ +] Slyšitelné ≥{mid} | "
+          "⏹ končí do hodiny | └─ akční tip proti QRM")
     print("Okna: T > = stanice startuje | T ! = kanál se uvolní (rušitel vypíná); ŠANCE = po události")
     print("Více cílů: zvyš --limit | Řazení: --sort freq|score | "
           "Filtr šance: --chance top|mid|low|all | Místo: --lat --lon --alt --az")
@@ -1239,8 +1257,10 @@ def main():
                     help="sluneční tok (default dle scoring.js)")
     ap.add_argument("--kp", type=int, default=None,
                     help="geomagnetický index Kp (default dle scoring.js)")
-    ap.add_argument("--show-china", action="store_true",
-                    help="nechat v radaru i čínské stanice")
+    ap.add_argument("--no-blacklist", "--show-china", dest="no_blacklist", action="store_true",
+                    help="vypnout blacklist (výchozí seznam ze scoring.js: Čína + HFCC placeholdery)")
+    ap.add_argument("--eibi", action="store_true",
+                    help="přidat EiBi doplněk (schedule_eibi.json, hrubá poloha) jako přepínač „+ EiBi“ v PWA")
     ap.add_argument("--limit", type=int, default=12, help="počet cílů ve výpisu (default 12)")
     ap.add_argument("--sort", default="freq", choices=["freq", "score"],
                     help="řazení cílů: freq = dle kmitočtu (default), score = dle šance")
@@ -1268,9 +1288,9 @@ def main():
             print("⚠  Bez --lat/--lon počítám pro střed ČR (orientačně). "
                   "Zadej svoje QTH: --lat 50.08 --lon 14.42 --alt 300 --az 180")
         db, source = load_schedule(args)
+        blacklist = () if args.no_blacklist else SCORING["blacklistDefault"]
         results, active, now_minutes = score_stations(
-            db, qth, rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp,
-            hide_china=not args.show_china, limit=args.limit)
+            db, qth, rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp, blacklist=blacklist)
         if args.sort == "freq":
             results.sort(key=lambda r: (r["freq"], -r["score"]))
         else:
@@ -1283,7 +1303,7 @@ def main():
             chance_label = f"Silné (skóre ≥ {hi})"
         elif args.chance == "mid":
             shown = [r for r in results if mid <= r["score"] < hi]
-            chance_label = f"Slyšitelné ({mid}–{hi})"
+            chance_label = f"Slyšitelné ({mid}–{hi - 1})"
         elif args.chance == "low":
             shown = [r for r in results if r["score"] < mid]
             chance_label = f"Slabé (skóre < {mid})"
@@ -1291,7 +1311,7 @@ def main():
             shown = results
             chance_label = "vše"
         windows = collect_time_windows(db, active, now_minutes,
-                                       hide_china=not args.show_china, qth=qth,
+                                       blacklist=blacklist, qth=qth,
                                        rx=args.rx, ant=args.ant, sfi=args.sfi, kp=args.kp)
         print(f"[i] Zdroj dat: {source} ({len(db)} záznamů)")
         print_radar(shown, windows, qth, args.rx, args.ant, now_minutes,

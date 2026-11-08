@@ -698,7 +698,7 @@
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
         <input type="checkbox" id="blOn" checked> <span data-i18n="bl_on">Blacklist zapnutý</span>
       </label>
-      <label style="margin-top:6px;" data-i18n-html="bl_hint">Vzory — jeden na řádek, matchuje <strong>název</strong> stanice nebo <strong>kód země</strong> (CHN, RUS, …):</label>
+      <label style="margin-top:6px;" data-i18n-html="bl_hint">Vzory — jeden na řádek, celé slovo v <strong>názvu</strong> stanice; VELKÝMI navíc <strong>kód země</strong> (CHN, RUS, …):</label>
       <textarea id="blText" rows="6" spellcheck="false" placeholder="CHN&#10;RUS&#10;for new organization"></textarea>
       <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
         <button type="button" class="action-btn" id="btnBlReset" data-i18n="bl_reset">↺ Výchozí seznam</button>
@@ -777,7 +777,7 @@ const I18N = {
     w_prop: "Propagace (MUF, D-vrstva)", w_minscore: "Min. skóre (skrýt pod)",
     w_reset: "↺ Výchozí váhy", w_copy: "📋 Kopírovat váhy (JSON)",
     bl_summary: "🚫 Blacklist stanic", bl_on: "Blacklist zapnutý",
-    bl_hint: "Vzory — jeden na řádek, matchuje <strong>název</strong> stanice nebo <strong>kód země</strong> (CHN, RUS, …):",
+    bl_hint: "Vzory — jeden na řádek, celé slovo v <strong>názvu</strong> stanice; VELKÝMI navíc <strong>kód země</strong> (CHN, RUS, …):",
     bl_reset: "↺ Výchozí seznam", radar_info: "Klikni na tečku na radaru…",
     radar_leg1: "Číslo ve výseči = počet aktivních vysílačů ve směru",
     radar_leg2: '<span class="dot-g">●</span> top cíle (bez čísel, detail klepnutím) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> ostatní',
@@ -851,7 +851,7 @@ const I18N = {
     w_prop: "Propagation (MUF, D-layer)", w_minscore: "Min. score (hide below)",
     w_reset: "↺ Default weights", w_copy: "📋 Copy weights (JSON)",
     bl_summary: "🚫 Station blacklist", bl_on: "Blacklist on",
-    bl_hint: "Patterns — one per line, matches station <strong>name</strong> or <strong>country code</strong> (CHN, RUS, …):",
+    bl_hint: "Patterns — one per line, whole word in station <strong>name</strong>; UPPERCASE also matches <strong>country code</strong> (CHN, RUS, …):",
     bl_reset: "↺ Default list", radar_info: "Tap a dot on the radar…",
     radar_leg1: "Number in a sector = count of active transmitters that way",
     radar_leg2: '<span class="dot-g">●</span> top targets (no number, tap for detail) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> others',
@@ -1039,22 +1039,26 @@ function fmtParts(p) {
 // ── Blacklist (skryté stanice) ──────────────────────────────────────────────
 // Jeden přepínatelný seznam vzorů; vzor matchuje NÁZEV stanice NEBO kód země
 // (case-insensitive, substring). Zapnutý = shoda vypadne úplně (i z QRM/radaru).
-const BL_KEY = 'dxr_blacklist_v1';
+const BL_KEY = 'dxr_blacklist_v2';
 const BL_ON_KEY = 'dxr_blacklist_on_v1';
-const BLACKLIST_DEFAULT = [
-  'CHN', 'TIB', 'CRI', 'CNR', 'china radio',          // Čína a čínské relaye
-  'for new organization', 'new organization', 'disaster relief', // HFCC placeholdery
-  'unknown'
-];
-let BLACKLIST = [];      // pole stringů (lowercase)
+// Výchozí seznam sdílí s CLI (scoring.js). VELKÝMI = kód země, malými = jen název.
+const BLACKLIST_DEFAULT = SCORING.blacklistDefault;
+const BL_KEY_V1 = 'dxr_blacklist_v1'; // starý formát: vše lowercase, substring
+let BLACKLIST = [];      // pole vzorů (velikost písmen rozlišuje kód země vs. název)
 let BLACKLIST_ON = true; // přepínač
+const cleanBl = arr => arr.map(s => String(s).trim()).filter(Boolean);
 function loadBlacklist() {
   try {
-    const raw = localStorage.getItem(BL_KEY);
-    BLACKLIST = (raw != null ? JSON.parse(raw) : BLACKLIST_DEFAULT).map(s => String(s).toLowerCase().trim()).filter(Boolean);
+    let raw = localStorage.getItem(BL_KEY);
+    if (raw == null && localStorage.getItem(BL_KEY_V1) != null) {
+      // migrace v1: krátké kódy kromě zkratek stanic (cri/cnr) byly myšlené jako země
+      raw = JSON.stringify(JSON.parse(localStorage.getItem(BL_KEY_V1)).map(s =>
+        /^[a-z]{1,3}$/i.test(s) && !['cri', 'cnr'].includes(s.toLowerCase()) ? s.toUpperCase() : s));
+    }
+    BLACKLIST = cleanBl(raw != null ? JSON.parse(raw) : BLACKLIST_DEFAULT);
     const on = localStorage.getItem(BL_ON_KEY);
     BLACKLIST_ON = on == null ? true : on === '1';
-  } catch (e) { BLACKLIST = BLACKLIST_DEFAULT.map(s => s.toLowerCase()); BLACKLIST_ON = true; }
+  } catch (e) { BLACKLIST = cleanBl(BLACKLIST_DEFAULT); BLACKLIST_ON = true; }
 }
 function saveBlacklist() {
   try {
@@ -1062,14 +1066,19 @@ function saveBlacklist() {
     localStorage.setItem(BL_ON_KEY, BLACKLIST_ON ? '1' : '0');
   } catch (e) { /* privátní režim */ }
 }
+// Vzor = celé slovo/fráze v názvu (ne podřetězec: "cri" ≠ "Cristiana");
+// vzor psaný VELKÝMI navíc přesně odpovídá kódu země.
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const blReCache = new Map();
+function blMatches(p, st) {
+  if (p === p.toUpperCase() && /[A-Z]/.test(p) && (st.country || '') === p) return true;
+  let re = blReCache.get(p);
+  if (!re) blReCache.set(p, re = new RegExp(`(^|[^a-z0-9])${escRe(p.toLowerCase())}($|[^a-z0-9])`));
+  return re.test((st.station || '').toLowerCase());
+}
 function isBlacklisted(st) {
   if (!BLACKLIST_ON || !BLACKLIST.length) return false;
-  const hay = ((st.station || '') + ' ' + (st.country || '')).toLowerCase();
-  const cc = (st.country || '').toLowerCase();
-  for (const p of BLACKLIST) {
-    if (cc === p || hay.includes(p)) return true;
-  }
-  return false;
+  return BLACKLIST.some(p => blMatches(p, st));
 }
 
 // 2. SFÉRICKÁ MATEMATIKA (Vzdálenost a Azimut ortodromy)
@@ -1238,6 +1247,34 @@ function stationKey(st) {
   return `${st.freq}|${name}`;
 }
 
+const passesDay = (st, dayNum) => !st.days || st.days.includes(String(dayNum));
+
+// Deduplikace téhož vysílání napříč zdroji: přesná poloha (HFCC/AOKI) má přednost
+// před EiBi centroidem země (approxLoc), teprve pak rozhoduje vyšší výkon.
+function preferRecord(a, b) {
+  if (!!a.approxLoc !== !!b.approxLoc) return a.approxLoc ? b : a;
+  return b.kw > a.kw ? b : a;
+}
+function dedupActive(list) {
+  const seen = new Map();
+  for (const st of list) {
+    const key = stationKey(st);
+    seen.set(key, seen.has(key) ? preferRecord(seen.get(key), st) : st);
+  }
+  return [...seen.values()];
+}
+
+// Celodenní vysílání (00:00–24:00, 00:00–23:59, start == konec) nikdy „nekončí".
+function isAllDay(st) {
+  const s = toMinutes(st.start), e = toMinutes(st.end);
+  return s % 1440 === e % 1440 || (s === 0 && e >= 1439);
+}
+// Minuty do konce vysílání; celodenní = Infinity (žádné „KONČÍ ZA“ ani 🔓 okno)
+function minutesLeft(st, utcMinutes) {
+  if (isAllDay(st)) return Infinity;
+  return ((toMinutes(st.end) - utcMinutes) + 1440) % 1440 || 1440;
+}
+
 function bandKey(freq) {
   if (freq < 5006) return "tropo";
   if (freq <= 6200) return "49";
@@ -1288,7 +1325,7 @@ function scoreStation(st, env, activeNow) {
 
   // B2. Korekce směrovosti vysílače (HFCC azimut antény)
   let beamAdj = 0;
-  if (st.azimuth > 0) {
+  if (st.azimuth != null) { // null = všesměrová anténa; 0 = míří na sever
     const brgTxToMe = calcGeodesic(st.lat, st.lon, env.myLat, env.myLon).bearing;
     let delta = Math.abs(brgTxToMe - st.azimuth);
     if (delta > 180) delta = 360 - delta;
@@ -1383,8 +1420,10 @@ function evaluateStations() {
     document.getElementById('targetsCount').textContent = '';
     return;
   }
-  const alt = parseFloat(document.getElementById('altitude').value) || 300;
-  const balconyAz = parseFloat(document.getElementById('azimuth').value) || 180;
+  // 0 je platná hodnota (sever / hladina moře) – default jen pro prázdné pole
+  const numOr = (id, def) => { const v = parseFloat(document.getElementById(id).value); return Number.isFinite(v) ? v : def; };
+  const alt = numOr('altitude', 300);
+  const balconyAz = numOr('azimuth', 180);
   const rx = document.getElementById('rxSelect').value;
   const ant = document.getElementById('antSelect').value;
   const minScore = parseInt(document.getElementById('minScore').value, 10) || 0;
@@ -1392,26 +1431,20 @@ function evaluateStations() {
   // Blacklist (název NEBO kód země) – skryté stanice vypadnou úplně, i z QRM/radaru.
   // Deduplikace napříč zdroji (EiBi/HFCC/AOKI): nech nejsilnější záznam,
   // aby duplikáty nenafukovaly seznam ani nehlásily falešné krytí kanálu.
-  const seenActive = new Map();
-  for (const st of SCHEDULE_DB.filter(st => isTimeActive(st.start, st.end, utcMinutes) && !isBlacklisted(st))) {
-    const key = stationKey(st);
-    if (!seenActive.has(key) || st.kw > seenActive.get(key).kw) seenActive.set(key, st);
-  }
-  const activeAll = [...seenActive.values()];
+  // Dny vysílání (pole days, např. "12" = jen pondělí a úterý) se kontrolují PŘED
+  // deduplikací: stanice, která dnes nevysílá, nesmí strhávat QRM ani vytlačit dnešní záznam.
+  const dayNum = ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne
+  const activeAll = dedupActive(SCHEDULE_DB.filter(st =>
+    isTimeActive(st.start, st.end, utcMinutes) && passesDay(st, dayNum) && !isBlacklisted(st)));
 
   const results = [];
-
-  const dayNum = ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne
 
   const env = { myLat, myLon, alt, balconyAz, rx, ant, weights: WEIGHTS, utcHour: now.getUTCHours(), now };
 
   for (const st of activeAll) {
-    // Dny vysílání (HFCC pole days, např. "12" = jen pondělí a úterý)
-    if (st.days && !st.days.includes(String(dayNum))) continue;
-
     results.push({
       ...st, ...scoreStation(st, env, activeAll),
-      minsLeft: ((toMinutes(st.end) - utcMinutes) + 1440) % 1440
+      minsLeft: minutesLeft(st, utcMinutes)
     });
   }
 
@@ -1496,7 +1529,8 @@ function renderUpcoming(activeAll, utcMinutes, env, dayNum) {
   const soon = m => m <= 60;
   const items = [];
   const seen = new Set();
-  const passesToday = st => !st.days || st.days.includes(String(dayNum));
+  const passesToday = st => passesDay(st, dayNum);
+  const tomorrow = dayNum % 7 + 1;
   // Časová okna respektují stejné filtry jako hlavní seznam: pásmo + min. skóre
   const minScore = parseInt(document.getElementById('minScore').value, 10) || 0;
   const push = (st, t, typ, info, activeNow) => {
@@ -1517,19 +1551,22 @@ function renderUpcoming(activeAll, utcMinutes, env, dayNum) {
     const stronger = activeAll.find(o => o !== st && o.freq === st.freq && o.kw > st.kw);
     if (!stronger) continue;
     if (stationKey(stronger) === stationKey(st)) continue; // duplikát téže stanice, ne rušitel
-    const clearIn = ((toMinutes(stronger.end) - utcMinutes) + 1440) % 1440;
+    const clearIn = minutesLeft(stronger, utcMinutes); // celodenní rušitel = Infinity, nevypne
     if (!soon(clearIn)) continue;
     // šance až po vyčištění kanálu: silnější rušitelé už nevysílají
     const cleaned = activeAll.filter(o => !(o !== st && o.freq === st.freq && o.kw > st.kw));
     push(st, clearIn, '🔓', tr('win_clear', { end: stronger.end, st: stronger.station }), cleaned);
   }
-  // b) ▶ Stanice, které právě teď nejdou, ale startují v příští hodině
+  // b) ▶ Stanice, které právě teď nejdou, ale startují v příští hodině.
+  // Co už teď na stejném kmitočtu vysílá (navazující blok téže stanice), není „nový start".
+  for (const st of activeAll) seen.add(stationKey(st));
   for (const st of SCHEDULE_DB) {
     if (isBlacklisted(st)) continue;
     if (isTimeActive(st.start, st.end, utcMinutes)) continue;
-    if (!passesToday(st)) continue;
     const startsIn = ((toMinutes(st.start) - utcMinutes) + 1440) % 1440;
     if (!soon(startsIn)) continue;
+    // start po půlnoci UTC = zítřejší den vysílání
+    if (!passesDay(st, utcMinutes + startsIn >= 1440 ? tomorrow : dayNum)) continue;
     push(st, startsIn, '▶', tr('win_start', { start: st.start }), activeAll);
   }
 
@@ -2232,7 +2269,7 @@ document.getElementById('btnWeightsCopy').addEventListener('click', () => {
 });
 // blacklist
 document.getElementById('blText').addEventListener('change', e => {
-  BLACKLIST = e.target.value.split(/\r?\n/).map(s => s.toLowerCase().trim()).filter(Boolean);
+  BLACKLIST = cleanBl(e.target.value.split(/\r?\n/));
   saveBlacklist(); updateBlStatus(); evaluateStations();
 });
 document.getElementById('blOn').addEventListener('change', e => {
@@ -2240,7 +2277,7 @@ document.getElementById('blOn').addEventListener('change', e => {
   saveBlacklist(); updateBlStatus(); evaluateStations();
 });
 document.getElementById('btnBlReset').addEventListener('click', () => {
-  BLACKLIST = BLACKLIST_DEFAULT.map(s => s.toLowerCase());
+  BLACKLIST = cleanBl(BLACKLIST_DEFAULT);
   BLACKLIST_ON = true;
   document.getElementById('blText').value = BLACKLIST.join('\n');
   document.getElementById('blOn').checked = true;
