@@ -1112,15 +1112,12 @@ function isTimeActive(startStr, endStr, nowMinutes) {
 //    Při online připojení stáhne SFI a Kp; jinak použije klidový odhad (142 / 2).
 const SPACE_WX = { sfi: SCORING.spaceWeatherDefault.sfi, kp: SCORING.spaceWeatherDefault.kp, live: false };
 
-function mufEstimate(sfi, utcHours, daylight = 0) {
+function mufEstimate(sfi, daylight = 0) {
   // Empirická heuristika: noční MUF ~ const + sfiMul*SFI, denní +dayBoost MHz (vrstva F2).
   // daylight 0..1 = osvětlení prostředku trasy (pathDaylight) – denní MUF náběhne plynule
-  // přes soumrak, ne skokem (např. ranní otevření na východ dřív než naše poledne).
-  // V lokálním okně dayStartH–dayEndH platí plný denní MUF vždy (kalibrace).
+  // přes soumrak, ne skokem, a sedí v každém ročním období (žádné pevné hodiny).
   const m = SCORING.muf;
-  const base = m.const + m.sfiMul * sfi;
-  const win = utcHours >= m.dayStartH && utcHours <= m.dayEndH ? 1 : 0;
-  return Math.round(base + m.dayBoost * Math.max(win, daylight));
+  return Math.round(m.const + m.sfiMul * sfi + m.dayBoost * daylight);
 }
 // Plynulé osvětlení prostředku trasy: 0 = noc (Slunce ≤ smoothFromDeg), 1 = den (≥ smoothToDeg)
 function pathDaylight(lat1, lon1, lat2, lon2, date) {
@@ -1164,10 +1161,10 @@ function dayAbsorption(freq, myLat, myLon, stLat, stLon, date) {
   return -Math.round(Math.sin(sunEl * Math.PI / 180) * freqFactor * da.maxPenalty);
 }
 
-function propagationAdjust(freq, bearing, sfi, kp, utcHours, daylight = 0) {
+function propagationAdjust(freq, bearing, sfi, kp, daylight = 0) {
   // Frekvenční okno LUF–MUF: co je nad MUF, vyletí do vesmíru (-35); hraniční -10.
   const p = SCORING.prop;
-  const muf = mufEstimate(sfi, utcHours, daylight);
+  const muf = mufEstimate(sfi, daylight);
   let adj = 0;
   if (freq > muf * 1000 + p.mufMarginKHz) adj += p.aboveMufPenalty;
   else if (freq > muf * 1000 - p.mufMarginKHz) adj += p.nearMufPenalty;
@@ -1225,7 +1222,10 @@ function updateTelemetryBar() {
   document.getElementById('twSfi').textContent = `SFI ${SPACE_WX.sfi}`;
   document.getElementById('twKp').textContent = `Kp ${SPACE_WX.kp}`;
   const now = new Date();
-  const muf = mufEstimate(SPACE_WX.sfi, now.getUTCHours());
+  // „MUF teď" pro místní trasy: osvětlení nad vlastním QTH (bez polohy střed ČR)
+  let [la, lo] = document.getElementById('qthCoords').value.split(',').map(s => parseFloat(s));
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) [la, lo] = [49.80, 15.47];
+  const muf = mufEstimate(SPACE_WX.sfi, pathDaylight(la, lo, la, lo, now));
   document.getElementById('twMuf').textContent = `~${muf} MHz`;
   document.getElementById('twCond').textContent = geomagLabel(SPACE_WX.kp) + (SPACE_WX.live ? tr('cond_live') : tr('cond_offline'));
 }
@@ -1385,7 +1385,7 @@ function scoreStation(st, env, activeNow) {
   const powerBonus = Math.round(Math.log10(Math.max(st.kw, 1) / SCORING.power.centerKw) * SCORING.power.mul);
   // E. ionosféra (SFI/Kp z NOAA) + denní D-absorpce = propagační člen (jeden slider)
   const daylight = pathDaylight(env.myLat, env.myLon, st.lat, st.lon, env.now || new Date());
-  const propAdj = propagationAdjust(f, bearing, SPACE_WX.sfi, SPACE_WX.kp, env.utcHour, daylight);
+  const propAdj = propagationAdjust(f, bearing, SPACE_WX.sfi, SPACE_WX.kp, daylight);
   const dayAbsorb = dayAbsorption(f, env.myLat, env.myLon, st.lat, st.lon, env.now || new Date());
 
   // D2. Skip-zóna + multi-hop útlum (nahrazuje starý lineární distPenalty)
@@ -1476,7 +1476,7 @@ function evaluateStations() {
   // Dny vysílání (pole days, např. "12" = jen pondělí a úterý) se kontrolují PŘED
   // deduplikací: stanice, která dnes nevysílá, nesmí strhávat QRM ani vytlačit dnešní záznam.
   const dayNum = ((now.getUTCDay() + 6) % 7) + 1; // 1=Po ... 7=Ne
-  const env = { myLat, myLon, alt, balconyAz, rx, ant, weights: WEIGHTS, utcHour: now.getUTCHours(), now };
+  const env = { myLat, myLon, alt, balconyAz, rx, ant, weights: WEIGHTS, now };
   const activeAll = dedupActive(SCHEDULE_DB.filter(st =>
     isTimeActive(st.start, st.end, utcMinutes) && passesDay(st, dayNum)), env);
 

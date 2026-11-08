@@ -35,8 +35,7 @@ window.SCORING = {
     "youloopAirspyBonus": 14
   },
   "power": { "centerKw": 100, "mul": 14 },
-  "muf": { "const": 6, "sfiMul": 0.09, "dayBoost": 8, "dayStartH": 8, "dayEndH": 16,
-    "smoothFromDeg": -6, "smoothToDeg": 20 },
+  "muf": { "const": 6, "sfiMul": 0.09, "dayBoost": 8, "smoothFromDeg": -6, "smoothToDeg": 20 },
   "prop": {
     "aboveMufPenalty": -35,
     "nearMufPenalty": -10,

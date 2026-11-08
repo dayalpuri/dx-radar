@@ -1026,13 +1026,11 @@ def day_absorption(freq, my_lat, my_lon, st_lat, st_lon, dt):
     return -jround(math.sin(math.radians(sun_el)) * freq_factor * da["maxPenalty"])
 
 
-def muf_estimate(sfi, utc_hours, daylight=0.0):
-    """MUF odhad; denní posun plný v lokálním okně, jinak plynule dle osvětlení
-    prostředku trasy (daylight 0..1, gray-line). Shodné s PWA mufEstimate()."""
+def muf_estimate(sfi, daylight=0.0):
+    """MUF odhad; denní posun plynule dle osvětlení prostředku trasy (daylight 0..1,
+    gray-line) - bez pevných hodin, sedí v každém ročním období. Shodné s PWA mufEstimate()."""
     m = SCORING["muf"]
-    base = m["const"] + m["sfiMul"] * sfi
-    win = 1 if m["dayStartH"] <= utc_hours <= m["dayEndH"] else 0
-    return jround(base + m["dayBoost"] * max(win, daylight))
+    return jround(m["const"] + m["sfiMul"] * sfi + m["dayBoost"] * daylight)
 
 
 def path_daylight(lat1, lon1, lat2, lon2, dt):
@@ -1042,10 +1040,10 @@ def path_daylight(lat1, lon1, lat2, lon2, dt):
     return min(1.0, max(0.0, (el - m["smoothFromDeg"]) / (m["smoothToDeg"] - m["smoothFromDeg"])))
 
 
-def propagation_adjust(freq, bearing, sfi, kp, utc_hours, daylight=0.0):
+def propagation_adjust(freq, bearing, sfi, kp, daylight=0.0):
     """Okno LUF-MUF + aurorální absorpce; shodné s PWA propagationAdjust()."""
     p = SCORING["prop"]
-    muf = muf_estimate(sfi, utc_hours, daylight)
+    muf = muf_estimate(sfi, daylight)
     adj = 0
     if freq > muf * 1000 + p["mufMarginKHz"]:
         adj += p["aboveMufPenalty"]
@@ -1084,7 +1082,6 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
     ▶ po startu stanice, 🔓 po vypnutí rušitele."""
     lat, lon, alt, az_balcony = qth["lat"], qth["lon"], qth["alt"], qth["az"]
     now = datetime.now(timezone.utc)
-    utc_hour = now.hour
     w = SCORING["weightsDefault"]
     dist, bearing = calc_geodesic(lat, lon, st["lat"], st["lon"])
 
@@ -1123,7 +1120,7 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
     power = jround(math.log10(max(st.get("kw") or 0, 1) / SCORING["power"]["centerKw"]) * SCORING["power"]["mul"])
 
     daylight = path_daylight(lat, lon, st["lat"], st["lon"], now)
-    prop_adj = propagation_adjust(st["freq"], bearing, sfi, kp, utc_hour, daylight)
+    prop_adj = propagation_adjust(st["freq"], bearing, sfi, kp, daylight)
     day_absorb = day_absorption(st["freq"], lat, lon, st["lat"], st["lon"], now)
     skip = skip_term(st["freq"], dist)
 
