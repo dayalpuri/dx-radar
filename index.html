@@ -354,6 +354,8 @@
       padding: 1px 6px; border-radius: 999px; white-space: nowrap;
     }
 
+    /* Nástroje nad seznamem stanic (ladění skóre + blacklist) */
+    .list-tools { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
     /* Ladicí panel (details) – slidery vah + blacklist */
     details.tuning {
       grid-column: 1 / -1; background: var(--inset);
@@ -599,52 +601,6 @@
       <button type="button" class="action-btn" id="btnCompass" data-i18n="aim_compass" style="margin-top:6px;">🧭 Zamknout azimut kompasem</button>
     </div>
 
-    <!-- Ladění skóre: posuvníky vah + minimální skóre (uloží se lokálně) -->
-    <details class="tuning" id="tuningBox">
-      <summary data-i18n="tune_summary">⚙️ Ladění skóre (váhy)</summary>
-      <div class="tuning-body">
-        <div class="slider-row">
-          <label><span data-i18n="w_balcony">Směrovost (orientace)</span> <span class="wval" id="wBalconyVal">1.0×</span></label>
-          <input type="range" id="wBalcony" min="0" max="2" step="0.1" value="1">
-        </div>
-        <div class="slider-row">
-          <label><span data-i18n="w_power">Výkon vysílače</span> <span class="wval" id="wPowerVal">1.2×</span></label>
-          <input type="range" id="wPower" min="0" max="2" step="0.1" value="1.2">
-        </div>
-        <div class="slider-row">
-          <label><span data-i18n="w_skip">Vzdálenost / skip</span> <span class="wval" id="wSkipVal">1.0×</span></label>
-          <input type="range" id="wSkip" min="0" max="2" step="0.1" value="1">
-        </div>
-        <div class="slider-row">
-          <label><span data-i18n="w_prop">Propagace (MUF, D-vrstva)</span> <span class="wval" id="wPropVal">1.5×</span></label>
-          <input type="range" id="wProp" min="0" max="2" step="0.1" value="1.5">
-        </div>
-        <div class="slider-row">
-          <label><span data-i18n="w_minscore">Min. skóre (skrýt pod)</span> <span class="wval" id="minScoreVal">50</span></label>
-          <input type="range" id="minScore" min="0" max="90" step="5" value="50">
-        </div>
-        <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="action-btn" id="btnWeightsReset" data-i18n="w_reset">↺ Výchozí váhy</button>
-          <button type="button" class="action-btn" id="btnWeightsCopy" data-i18n="w_copy">📋 Kopírovat váhy (JSON)</button>
-        </div>
-      </div>
-    </details>
-
-    <!-- Blacklist: jeden přepínatelný seznam (název NEBO kód země) -->
-    <details class="tuning" id="blacklistBox">
-      <summary><span data-i18n="bl_summary">🚫 Blacklist stanic</span> <span id="blStatus" class="wval"></span></summary>
-      <div class="tuning-body">
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="checkbox" id="blOn" checked> <span data-i18n="bl_on">Blacklist zapnutý</span>
-        </label>
-        <label style="margin-top:6px;" data-i18n-html="bl_hint">Vzory — jeden na řádek, matchuje <strong>název</strong> stanice nebo <strong>kód země</strong> (CHN, RUS, …):</label>
-        <textarea id="blText" rows="6" spellcheck="false" placeholder="CHN&#10;RUS&#10;for new organization"></textarea>
-        <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="action-btn" id="btnBlReset" data-i18n="bl_reset">↺ Výchozí seznam</button>
-        </div>
-      </div>
-    </details>
-
     <div class="btn-row" style="display:flex; gap:8px; grid-column: 1/-1; margin-top:2px;">
       <button type="button" class="action-btn" id="btnSync" data-i18n="sync_btn">⬇️ Stáhnout aktuální rozvrh</button>
     </div>
@@ -704,6 +660,55 @@
   <span><span data-i18n="tw_kp">Geomagnetika:</span> <strong id="twKp">Kp --</strong></span>
   <span><span data-i18n="tw_muf">MUF odhad:</span> <strong id="twMuf">-- MHz</strong></span>
   <span><span data-i18n="tw_cond">Stav:</span> <strong id="twCond" data-i18n="tw_loading">Načítám NOAA…</strong></span>
+</div>
+
+<!-- Ladění skóre + blacklist: nad seznamem stanic (dřív nahoře u radaru) -->
+<div class="list-tools">
+  <!-- Ladění skóre: posuvníky vah + minimální skóre (uloží se lokálně) -->
+  <details class="tuning" id="tuningBox">
+    <summary data-i18n="tune_summary">⚙️ Ladění skóre (váhy)</summary>
+    <div class="tuning-body">
+      <div class="slider-row">
+        <label><span data-i18n="w_balcony">Směrovost (orientace)</span> <span class="wval" id="wBalconyVal">1.0×</span></label>
+        <input type="range" id="wBalcony" min="0" max="2" step="0.1" value="1">
+      </div>
+      <div class="slider-row">
+        <label><span data-i18n="w_power">Výkon vysílače</span> <span class="wval" id="wPowerVal">1.2×</span></label>
+        <input type="range" id="wPower" min="0" max="2" step="0.1" value="1.2">
+      </div>
+      <div class="slider-row">
+        <label><span data-i18n="w_skip">Vzdálenost / skip</span> <span class="wval" id="wSkipVal">1.0×</span></label>
+        <input type="range" id="wSkip" min="0" max="2" step="0.1" value="1">
+      </div>
+      <div class="slider-row">
+        <label><span data-i18n="w_prop">Propagace (MUF, D-vrstva)</span> <span class="wval" id="wPropVal">1.5×</span></label>
+        <input type="range" id="wProp" min="0" max="2" step="0.1" value="1.5">
+      </div>
+      <div class="slider-row">
+        <label><span data-i18n="w_minscore">Min. skóre (skrýt pod)</span> <span class="wval" id="minScoreVal">50</span></label>
+        <input type="range" id="minScore" min="0" max="90" step="5" value="50">
+      </div>
+      <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="action-btn" id="btnWeightsReset" data-i18n="w_reset">↺ Výchozí váhy</button>
+        <button type="button" class="action-btn" id="btnWeightsCopy" data-i18n="w_copy">📋 Kopírovat váhy (JSON)</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Blacklist: jeden přepínatelný seznam (název NEBO kód země) -->
+  <details class="tuning" id="blacklistBox">
+    <summary><span data-i18n="bl_summary">🚫 Blacklist stanic</span> <span id="blStatus" class="wval"></span></summary>
+    <div class="tuning-body">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="blOn" checked> <span data-i18n="bl_on">Blacklist zapnutý</span>
+      </label>
+      <label style="margin-top:6px;" data-i18n-html="bl_hint">Vzory — jeden na řádek, matchuje <strong>název</strong> stanice nebo <strong>kód země</strong> (CHN, RUS, …):</label>
+      <textarea id="blText" rows="6" spellcheck="false" placeholder="CHN&#10;RUS&#10;for new organization"></textarea>
+      <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="action-btn" id="btnBlReset" data-i18n="bl_reset">↺ Výchozí seznam</button>
+      </div>
+    </div>
+  </details>
 </div>
 
 <div class="main-tabs" id="mainTabs">
