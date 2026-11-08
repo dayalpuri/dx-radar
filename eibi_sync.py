@@ -26,6 +26,7 @@ Použití:
 
 import argparse
 import csv
+import functools
 import json
 import math
 import os
@@ -40,27 +41,29 @@ SEASON_FILES = {"b": "sked-b26.csv", "a": "sked-a26.csv"}
 DEFAULT_OUT_JSON = "schedule.json"
 
 # ---------------------------------------------------------------------------
-# Zjednodušený slovník ITU kódů -> přibližné souřadnice hlavního vysílacího uzlu.
-# (Plná verze by parsovala sitelist z HFCC; EiBi samotné souřadnice nedodává.)
+# Zjednodušený slovník ITU kódů (jak je používá EiBi: G, D, F, J, KRE, VTN...)
+# -> přibližné souřadnice hlavního vysílacího uzlu. Kódy ověřeny proti legendě
+# eibispace.de/dx/README.TXT. EiBi samotné souřadnice nedodává; CLA (clandestine)
+# a XUU (neidentifikováno) záměrně chybí - poloha neznámá.
 # ---------------------------------------------------------------------------
 COUNTRY_COORDS = {
     "MLI": (12.65, -8.00),   # Mali
     "TZA": (-6.10, 39.26),   # Tanzanie
     "ETH": (8.88, 38.78),    # Etiopie
     "MDG": (-18.87, 47.50),  # Madagaskar
-    "NGA": (9.05, 7.49),     # Nigérie
-    "ZAF": (-26.55, 28.01),  # Jižní Afrika (Meyerton)
+    "NIG": (9.05, 7.49),     # Nigérie
+    "AFS": (-26.55, 28.01),  # Jižní Afrika (Meyerton)
     "EGY": (31.18, 30.05),   # Egypt (Abis)
     "TUR": (39.93, 32.85),   # Turecko (Emirler)
     "GRC": (38.40, 23.60),   # Řecko (Avlis)
     "IRN": (29.45, 55.68),   # Írán (Sirjan)
     "IND": (13.23, 77.70),   # Indie (Bengaluru)
-    "VNM": (21.13, 105.50),  # Vietnam
-    "MMR": (16.86, 96.19),   # Myanmar
-    "IDN": (-5.14, 119.43),  # Indonésie (Makassar)
-    "MYS": (2.99, 101.78),   # Malajsie (Kajang)
+    "VTN": (21.13, 105.50),  # Vietnam
+    "MYA": (16.86, 96.19),   # Myanmar
+    "INS": (-5.14, 119.43),  # Indonésie (Makassar)
+    "MLA": (2.99, 101.78),   # Malajsie (Kajang)
     "THA": (14.02, 100.52),  # Thajsko (Udon Thani)
-    "BRA": (-15.60, -47.90), # Brazílie (Brasília)
+    "B":   (-15.60, -47.90), # Brazílie (Brasília)
     "CHN": (39.90, 116.40),  # Čína
     "ROU": (44.75, 26.10),   # Rumunsko (Tiganesti)
     "ARS": (24.71, 46.67),   # Saúdská Arábie (Rijád)
@@ -68,19 +71,19 @@ COUNTRY_COORDS = {
     "CUB": (22.95, -82.40),  # Kuba (Bauta/Artemisa)
     "USA": (38.90, -77.00),  # USA (greenville ~35.9,-77.0; hl. uzel)
     "KOR": (37.55, 126.90),  # Jižní Korea
-    "JPN": (35.68, 139.69),  # Japonsko
+    "J":   (35.68, 139.69),  # Japonsko
     "PHL": (14.58, 120.97),  # Filipíny
     "AUS": (-33.87, 151.21), # Austrálie (Sydney/Vyner)
     "CAN": (45.42, -75.70),  # Kanada (Sackville)
-    "GBR": (51.48, -0.45),   # Velká Británie (Wootton)
-    "FRA": (47.65, 1.30),    # Francie (Allouis)
-    "DEU": (50.85, 9.65),    # Německo (Weener/Nauen)
-    "ESP": (40.42, -3.70),   # Španělsko (Arganda)
-    "ITA": (41.90, 12.50),   # Itálie (RMC Pisa ~43.7,10.4)
-    "PRT": (38.75, -9.15),   # Portugalsko
-    "NLD": (52.20, 5.40),    # Nizozemsko (Lopik/Mederfoort)
+    "G":   (51.48, -0.45),   # Velká Británie (Wootton)
+    "F":   (47.65, 1.30),    # Francie (Allouis)
+    "D":   (50.85, 9.65),    # Německo (Weener/Nauen)
+    "E":   (40.42, -3.70),   # Španělsko (Arganda)
+    "I":   (41.90, 12.50),   # Itálie (RMC Pisa ~43.7,10.4)
+    "POR": (38.75, -9.15),   # Portugalsko
+    "HOL": (52.20, 5.40),    # Nizozemsko (Lopik/Mederfoort)
     "BEL": (50.85, 4.35),    # Belgie (Wavre)
-    "SWE": (59.33, 18.07),   # Švédsko (Horby)
+    "S":   (59.33, 18.07),   # Švédsko (Horby)
     "NOR": (59.90, 10.75),   # Norsko (Kvitsøy)
     "FIN": (60.45, 25.00),   # Finsko (Pori ~61.5,21.8)
     "RUS": (55.75, 37.62),   # Rusko (Moskva)
@@ -88,7 +91,7 @@ COUNTRY_COORDS = {
     "POL": (52.23, 21.00),   # Polsko (Warszawa)
     "CZE": (50.09, 14.30),   # Česko (Liblice)
     "SVK": (48.15, 17.10),   # Slovensko
-    "HUN": (47.50, 19.05),   # Maďarsko (Szolnoki/Sopron)
+    "HNG": (47.50, 19.05),   # Maďarsko (Szolnoki/Sopron)
     "AUT": (48.20, 16.37),   # Rakousko (Moosbrunn)
     "SUI": (46.95, 7.45),    # Švýcarsko (Sottens)
     "ISR": (31.90, 34.90),   # Izrael
@@ -98,32 +101,32 @@ COUNTRY_COORDS = {
     "IRQ": (33.30, 44.40),   # Irák (Dohuk)
     "PAK": (33.70, 73.10),   # Pákistán (Islamabad)
     "BGD": (23.80, 90.40),   # Bangladéš (Savar)
-    "LKA": (6.90, 79.90),    # Srí Lanka (Ekala)
+    "CLN": (6.90, 79.90),    # Srí Lanka (Ekala)
     "NPL": (27.70, 85.30),   # Nepál
     "KAZ": (43.25, 76.90),   # Kazachstán (Alma-Ata)
     "UZB": (41.30, 69.25),   # Uzbekistán (Taškent)
     "TKM": (38.00, 63.20),   # Turkmenistán
     "KGZ": (42.87, 74.60),   # Kyrgyzstán
     "TWN": (24.71, 121.00),  # Tchaj-wan (Tamsui/Paochung)
-    "PRK": (39.00, 125.75),  # Severní Korea (Kujang)
+    "KRE": (39.00, 125.75),  # Severní Korea (Kujang)
     "MNG": (47.90, 106.90),  # Mongolsko
     "ARG": (-34.60, -58.38), # Argentina (General Pacheco)
     "CHL": (-33.45, -70.67), # Chile (Colina/Rengo)
-    "PER": (-12.05, -77.00), # Peru (Mala)
-    "COL": (4.60, -74.08),   # Kolumbie
+    "PRU": (-12.05, -77.00), # Peru (Mala)
+    "CLM": (4.60, -74.08),   # Kolumbie
     "VEN": (10.50, -66.90),  # Venezuela (Turmero)
-    "ECU": (-0.15, -78.35),  # Ekvádor
+    "EQA": (-0.15, -78.35),  # Ekvádor
     "BOL": (-16.50, -68.15), # Bolívie
-    "PRY": (-25.28, -57.60), # Paraguay
-    "URY": (-34.90, -56.20), # Uruguay
+    "PRG": (-25.28, -57.60), # Paraguay
+    "URG": (-34.90, -56.20), # Uruguay
     "MEX": (19.40, -99.10),  # Mexiko
     "GTM": (14.60, -90.50),  # Guatemala (San Marcos)
-    "CRI": (9.90, -84.10),   # Kostarika (Cartago)
+    "CTR": (9.90, -84.10),   # Kostarika (Cartago)
     "HND": (14.10, -87.20),  # Honduras
-    "DZA": (36.75, 3.05),    # Alžírsko (Bechar/Ourgla)
+    "ALG": (36.75, 3.05),    # Alžírsko (Bechar/Ourgla)
     "LBY": (32.85, 13.20),   # Libye (Sabratha)
     "TUN": (36.80, 10.18),   # Tunisko (Sidi Tlat)
-    "MAR": (33.60, -7.60),   # Maroko (Nador/Casablanca)
+    "MRC": (33.60, -7.60),   # Maroko (Nador/Casablanca)
     "SDN": (15.60, 32.50),   # Súdán (Omdurman/Umm Haraz)
     "SSD": (4.85, 31.60),    # Jižní Súdán
     "ERI": (15.33, 38.93),   # Eritrea (Asmara)
@@ -133,9 +136,9 @@ COUNTRY_COORDS = {
     "UGA": (0.32, 32.60),    # Uganda (Kampala)
     "COD": (-4.30, 15.30),   # DR Kongo (Kananga)
     "COG": (-4.25, 15.25),   # Kongo Brazzaville
-    "CMR": (3.87, 11.52),    # Kamerun (Garoua)
+    "CME": (3.87, 11.52),    # Kamerun (Garoua)
     "GAB": (0.42, 9.47),     # Gabon (Ntoum/Moyabi)
-    "CIV": (6.70, -5.30),    # Pobřeží slonoviny (Abidjan)
+    "CTI": (6.70, -5.30),    # Pobřeží slonoviny (Abidjan)
     "SEN": (14.70, -17.40),  # Senegal (Diam Niadio)
     "GHA": (5.60, -0.17),    # Ghana (Tema/Amansuri)
     "BFA": (12.35, -1.50),   # Burkina Faso
@@ -143,10 +146,10 @@ COUNTRY_COORDS = {
     "ZWE": (-17.80, 31.05),  # Zimbabwe (Gweru)
     "MOZ": (-25.97, 32.58),  # Mosambik (Maputo/Moatize)
     "MWI": (-13.95, 33.78),  # Malawi (Lilongwe/Mchijii)
-    "NAM": (-22.50, 17.05),  # Namibie
-    "AGO": (-8.80, 13.25),   # Angola (Benguela)
-    "GNQ": (3.75, 8.78),     # Rovníková Guinea (Bata)
-    "ARE": (24.43, 54.48),   # UAE (Dubai)
+    "NMB": (-22.50, 17.05),  # Namibie
+    "AGL": (-8.80, 13.25),   # Angola (Benguela)
+    "GNE": (3.75, 8.78),     # Rovníková Guinea (Bata)
+    "UAE": (24.43, 54.48),   # UAE (Dubai)
     "QAT": (25.28, 51.52),   # Katar
     "KWT": (29.35, 47.95),   # Kuvajt (Kabed)
     "BHR": (26.20, 50.58),   # Bahrajn
@@ -158,7 +161,7 @@ COUNTRY_COORDS = {
     "BIH": (43.85, 18.40),   # Bosna (Vogosca)
     "SVN": (46.05, 14.50),   # Slovinsko
     "MKD": (41.98, 21.43),   # Severní Makedonie (Oteševo)
-    "BGR": (42.70, 23.35),   # Bulharsko (Kostinbrod/Plovdiv)
+    "BUL": (42.70, 23.35),   # Bulharsko (Kostinbrod/Plovdiv)
     "ALB": (41.33, 19.45),   # Albánie (Shijak)
     "GEO": (41.70, 44.80),   # Gruzie (Tbilisi)
     "ARM": (40.18, 44.50),   # Arménie (Gavar)
@@ -172,6 +175,29 @@ COUNTRY_COORDS = {
     "PNG": (-9.45, 147.20),  # Papua Nová Guinea (Port Moresby)
     "NCL": (-22.28, 166.40), # Nová Kaledonie
     "VUT": (-17.75, 168.30), # Vanuatu
+    "CVA": (42.05, 12.32),   # Vatikán (Santa Maria di Galeria)
+    "SWZ": (-26.57, 31.42),  # Eswatini (TWR Manzini)
+    "NZL": (-38.84, 176.42), # Nový Zéland (Rangitaiki)
+    "ALS": (59.75, -151.73), # Aljaška (Anchor Point)
+    "HWA": (19.03, -155.67), # Havaj (Naalehu)
+    "GUM": (13.28, 144.67),  # Guam (Merizo)
+    "HKG": (22.30, 114.17),  # Hongkong
+    "CNR": (28.10, -15.42),  # Kanárské ostrovy
+    "AZR": (37.74, -25.67),  # Azory
+    "PTR": (18.22, -66.59),  # Portoriko
+    "BER": (32.30, -64.78),  # Bermudy
+    "PNR": (8.98, -79.52),   # Panama
+    "TRD": (10.65, -61.50),  # Trinidad a Tobago
+    "TCD": (12.11, 15.04),   # Čad
+    "FJI": (-18.14, 178.44), # Fidži
+    "OCE": (-17.53, -149.57),# Francouzská Polynésie (Tahiti)
+    "SLM": (-9.43, 159.95),  # Šalamounovy ostrovy
+    "MRT": (14.61, -61.07),  # Martinik
+    "LBR": (6.24, -10.70),   # Libérie (ELWA Monrovia)
+    "SNG": (1.42, 103.73),   # Singapur (Kranji)
+    "CYM": (19.29, -81.37),  # Kajmanské ostrovy
+    "NCG": (12.13, -86.25),  # Nikaragua
+    "SEY": (-4.62, 55.45),   # Seychely
 }
 
 # Čínské identifikátory: ITU kód, nebo vzor v názvu stanice (včetně relé mimo Čínu).
@@ -335,6 +361,43 @@ def download_eibi(csv_path):
     return None, None
 
 
+_EIBI_DAYS = {"Mo": 1, "Tu": 2, "We": 3, "Th": 4, "Fr": 5, "Sa": 6, "Su": 7}
+
+
+def parse_eibi_days(raw):
+    """EiBi sloupec dnů -> řetězec číslic jako HFCC ('135' = Po, St, Pá; '' = denně).
+
+    Umí 'Mo-Fr', 'We-Mo' (přes konec týdne), 'Tu,Fr', 'SaSu' a číslice '1245'
+    (1 = pondělí). Nepravidelné/speciální údaje ('irr', 'alt', '1.Sa', '3Nov',
+    'LSB'...) nefiltrujeme -> ''.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    if raw.isdigit():
+        days = {int(c) for c in raw if "1" <= c <= "7"}
+    else:
+        days = set()
+        for part in raw.split(","):
+            m = re.fullmatch(r"([A-Z][a-z])-([A-Z][a-z])", part)
+            if m and m.group(1) in _EIBI_DAYS and m.group(2) in _EIBI_DAYS:
+                a, b = _EIBI_DAYS[m.group(1)], _EIBI_DAYS[m.group(2)]
+                d = a
+                while True:
+                    days.add(d)
+                    if d == b:
+                        break
+                    d = d % 7 + 1
+                continue
+            chunks = re.findall(r"..", part) if len(part) % 2 == 0 else []
+            if not chunks or any(c not in _EIBI_DAYS for c in chunks):
+                return ""
+            days.update(_EIBI_DAYS[c] for c in chunks)
+    if not days or len(days) == 7:
+        return ""
+    return "".join(str(d) for d in sorted(days))
+
+
 def parse_eibi_csv(csv_path):
     """Rozparsuje sked-*.csv do záznamů kompatibilních s PWA (dx-radar.html).
 
@@ -343,6 +406,7 @@ def parse_eibi_csv(csv_path):
       6: cílová oblast, 7: kód vysílače, 8: persistence, 9-10: platnost.
     """
     records = []
+    skipped = {}
     with open(csv_path, mode="r", encoding="latin-1") as f:
         reader = csv.reader(f, delimiter=";")
         next(reader, None)  # přeskočit hlavičku
@@ -366,6 +430,7 @@ def parse_eibi_csv(csv_path):
             lang = row[5].strip() if len(row) > 5 else ""
             site = row[7].strip() if len(row) > 7 else ""
             if country not in COUNTRY_COORDS:
+                skipped[country] = skipped.get(country, 0) + 1
                 continue  # bez souřadnic nemá záznam pro radar hodnotu
             lat, lon = COUNTRY_COORDS[country]
             is_china = (country in CHINA_ITU
@@ -381,7 +446,11 @@ def parse_eibi_csv(csv_path):
                 "lat": lat, "lon": lon,
                 "kw": 500 if is_china else 100,
                 "isChina": is_china,
+                "days": parse_eibi_days(row[2]),
             })
+    if skipped:
+        top = ", ".join(f"{k or '?'}:{v}" for k, v in sorted(skipped.items(), key=lambda kv: -kv[1]))
+        print(f"[!] EiBi: {sum(skipped.values())} záznamů bez souřadnic země přeskočeno ({top}).")
     return records
 
 
@@ -404,7 +473,12 @@ HFCC_BASE = "http://www.hfcc.org/data/"
 def download_text(url):
     req = urllib.request.Request(url, headers={"User-Agent": "dx-radar/1.0"})
     with urllib.request.urlopen(req, timeout=90) as r:
-        return r.read().decode("latin-1")
+        raw = r.read()
+    # HFCC soubory se liší: language.txt je UTF-8 (s BOM), broadcas.txt Latin-1.
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
 
 
 def hfcc_files(season):
@@ -464,7 +538,7 @@ def parse_hfcc_schedule(text, sites, brc, langs):
         r"(\d{1,4})\s+(\d{1,3})\s+(\d)\s+(\d{1,4})\s+(\d{1,7})\s+"  # POWR AZIMUTH SLW ANT DAYS
         r"(\d{6})\s+(\d{6})\s+([A-Z])\s+"                # FDATE TDATE MOD
         r"(?:(\d{4,5})\s+)?"                             # AFRQ (nepovinné)
-        r"(?:([A-Za-z]{3})\s+)?"                         # LANGUAGE (nepovinné)
+        r"(?:((?:[A-Z][a-z]{2})+)\s+)?"                  # LANGUAGE: Eng / EngSpa / EngSlkCmn (nepovinné)
         r"(.*)$"                                         # ADM BRC FMO REQ ...
     )
     today = datetime.now(timezone.utc).date()
@@ -504,7 +578,8 @@ def parse_hfcc_schedule(text, sites, brc, langs):
         adm = tokens[0] if tokens else ""
         brc_code = tokens[1] if len(tokens) > 1 else (tokens[0] if tokens else "")
         station = brc.get(brc_code, brc_code) if brc_code else site_name
-        lang_code = (lang_code or "").title()
+        # Složený kód (EngSpa) = víc jazyků v jednom vysílání -> "English / Spanish"
+        lang = " / ".join(langs.get(c, c) for c in re.findall(r"[A-Z][a-z]{2}", lang_code or ""))
         is_china = adm == "CHN" or any(p in station for p in CHINA_NAME_PATTERNS)
         records.append({
             "freq": freq,
@@ -512,7 +587,7 @@ def parse_hfcc_schedule(text, sites, brc, langs):
             "end": f"{end_raw[:2]}:{end_raw[2:]}",
             "station": station,
             "country": adm,
-            "lang": langs.get(lang_code, lang_code),
+            "lang": lang,
             "site": site_name,
             "lat": lat, "lon": lon,
             "kw": kw,
@@ -678,17 +753,79 @@ def sync_aoki(preferred_season):
     return [], None
 
 
-def merge_schedules(*record_lists):
-    """Sloučení seznamů v pořadí priorit: HFCC > AOKI > EiBi (dedup dle freq+start+end)."""
+@functools.lru_cache(maxsize=None)
+def _minute_set(start, end):
+    """Minuty dne (po 5 min), kdy okno start-end běží; přes půlnoc se zalomí."""
+    return {m for m in range(0, 1440, 5) if is_time_active(start, end, m)}
+
+
+def _days_overlap(a, b):
+    """Prázdné 'days' = denně; jinak musí mít obě okna aspoň jeden společný den."""
+    return not a or not b or bool(set(a) & set(b))
+
+
+_GENERIC_WORDS = {"RADIO", "VOICE", "OF", "THE", "INTERNATIONAL", "NATIONAL",
+                  "BROADCASTING", "STATION", "SERVICE", "WORLD", "AND"}
+
+
+def _station_words(name):
+    words = re.sub(r"[^A-Z0-9 ]", " ", (name or "").upper()).split()
+    return [_STATION_ALIAS.get(w, w) for w in words]
+
+
+def same_station(a, b):
+    """Stejná stanice i při různém zápisu napříč zdroji: shoda normalizovaného
+    názvu, nebo je kratší název celými slovy začátkem delšího
+    ('WWV' ~ 'WWV Colorado (m.ann.)', ne však 'WWV' ~ 'WWVH Hawaii').
+    Samotná obecná slova ('Radio', 'Voice of') na shodu nestačí."""
+    wa, wb = _station_words(a), _station_words(b)
+    if not wa or not wb:
+        return False
+    if "".join(wa) == "".join(wb):
+        return True
+    short, long_ = (wa, wb) if len(wa) <= len(wb) else (wb, wa)
+    return long_[:len(short)] == short and not set(short) <= _GENERIC_WORDS
+
+
+def is_cross_source_dup(r, index):
+    """Je r jen jiný zápis vysílání, které už je v indexu z prioritnějšího zdroje?
+    Stejný kmitočet + stejná stanice (same_station) + překryv času i dnů.
+    Různé stanice na stejném kmitočtu a čase se NIKDY neslučují."""
+    for o in index.get(r["freq"], ()):
+        if (same_station(r.get("station"), o.get("station"))
+                and _days_overlap(r.get("days", ""), o.get("days", ""))
+                and _minute_set(r["start"], r["end"]) & _minute_set(o["start"], o["end"])):
+            return True
+    return False
+
+
+def merge_schedules(*record_lists, stats=None):
+    """Sloučení seznamů v pořadí priorit: HFCC > AOKI > EiBi.
+
+    - uvnitř jednoho zdroje se zahodí jen úplně shodné záznamy,
+    - mezi zdroji jen totéž vysílání (is_cross_source_dup),
+    takže všechny různé stanice na jednom kmitočtu v datech zůstanou."""
     merged = []
-    seen = set()
+    index = {}  # freq -> záznamy z dřívějších (prioritnějších) zdrojů
+    stats = stats if stats is not None else {}
+    stats.setdefault("exact", 0)
+    stats.setdefault("cross", 0)
     for records in record_lists:
+        seen_exact = set()
+        added = []
         for r in records:
-            key = (r["freq"], r["start"], r["end"])
-            if key in seen:
+            exact = json.dumps(r, sort_keys=True, ensure_ascii=False)
+            if exact in seen_exact:
+                stats["exact"] += 1
+                continue
+            seen_exact.add(exact)
+            if is_cross_source_dup(r, index):
+                stats["cross"] += 1
                 continue
             merged.append(r)
-            seen.add(key)
+            added.append(r)
+        for r in added:
+            index.setdefault(r["freq"], []).append(r)
     return merged
 
 
@@ -1168,16 +1305,17 @@ def main():
     sources = args.source if args.source != "all" else ["hfcc", "aoki", "eibi"]
     merged = []
     got_season = {}  # zdroj -> sezóna, kterou se skutečně povedlo stáhnout
+    merge_stats = {}
 
     if "hfcc" in sources and not args.offline:
         hfcc_records = sync_hfcc(preferred)
         if hfcc_records:
-            merged = merge_schedules(merged, hfcc_records)
+            merged = merge_schedules(merged, hfcc_records, stats=merge_stats)
             got_season["hfcc"] = preferred
     if "aoki" in sources and not args.offline:
         aoki_records, aoki_season = sync_aoki(preferred)
         if aoki_records:
-            merged = merge_schedules(merged, aoki_records)
+            merged = merge_schedules(merged, aoki_records, stats=merge_stats)
             got_season["aoki"] = aoki_season
     # EiBi se do schedule.json NEMERGUJE (jen country-centroid souřadnice by kazily skóre).
     # Místo toho jde do samostatného schedule_eibi.json jako volitelný doplněk pro PWA:
@@ -1201,12 +1339,12 @@ def main():
             if eibi_records and eibi_season and eibi_season != preferred and fresh:
                 print(f"[i] EiBi ({eibi_season}) doplněk přeskočen - stará sezóna vs {preferred.upper()}.")
             elif eibi_records:
-                merged_keys = {(r["freq"], r["start"], r["end"]) for r in merged}
-                for r in eibi_records:
-                    if (r["freq"], r["start"], r["end"]) not in merged_keys:
-                        r2 = dict(r)
-                        r2["approxLoc"] = True  # EiBi: poloha = centroid země, ne přesný vysílač
-                        eibi_extra.append(r2)
+                # Doplněk = jen vysílání, která HFCC/AOKI nemá (stejná stanice v jiném
+                # čase/dnech zůstává); různé stanice na stejném kmitočtu se nezahazují.
+                for r in merge_schedules(merged, eibi_records)[len(merged):]:
+                    r2 = dict(r)
+                    r2["approxLoc"] = True  # EiBi: poloha = centroid země, ne přesný vysílač
+                    eibi_extra.append(r2)
                 print(f"[i] EiBi doplněk: {len(eibi_extra)} stanic navíc mimo HFCC/AOKI (hrubá poloha).")
 
     if not merged:
@@ -1214,6 +1352,9 @@ def main():
         return 1
     for src, ssn in got_season.items():
         print(f"[i] {src}: {ssn.upper()}")
+    if merge_stats:
+        print(f"[i] Sloučení HFCC+AOKI: {merge_stats['exact']} úplně shodných, "
+              f"{merge_stats['cross']} totožných vysílání napříč zdroji vynecháno.")
     save_json(merged, args.out, sources=list(got_season.keys()))
     if eibi_extra:
         save_json(eibi_extra, "schedule_eibi.json", sources=["eibi"])
