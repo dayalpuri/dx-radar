@@ -1,12 +1,22 @@
 # DX Radar Pro — Kontextový SWL Engine
 
-Balkónový DX engine pro krátkovlnný SWL DXing: počítá jako zkušený DXer — sférická
-trigonometrie (ortodroma, azimut), kardioidní maska balkónu, bonus nadmořské výšky
-(nízký take-off angle), detekce rušení ±5 kHz včetně „neviditelné Číny", ionosférické
-podmínky dle NOAA, korekce směrovosti vysílače dle azimutu antény (HFCC) a tipy pro
-Tecsun PL-330 na míru zvolené anténě.
+**Co právě teď chytíš na krátkých vlnách?** DX Radar je pomocník pro posluchače
+krátkovlnného rozhlasu (SWL). Vezme aktuální seznam vysílání, tvoji polohu a čas
+a seřadí stanice podle toho, jak reálná je jejich slyšitelnost — abys neztrácel čas
+laděním stanic, které k tobě stejně nedoletí. Výsledek ukáže jako skóre i jako
+polární radar kolem tvé pozice.
 
-Postaveno na konverzaci s Gemini (zima B26).
+Skóre počítá z věcí, které rozhodují o příjmu:
+
+- **vzdálenost a směr** stanice (velkokružnicová geometrie) a kam máš volný výhled na oblohu,
+- **denní doba a stav ionosféry** — přes den jdou vyšší pásma, večer nižší; data o kosmickém počasí (SFI/Kp) tahá z NOAA,
+- **mrtvá zóna (skip)** — silná blízká stanice na vysokém pásmu může „přeletět" nad hlavou,
+- **výkon a směrování vysílače** (kam míří jeho anténa),
+- **rušení sousedních kanálů** a tvoje sestava **přijímač + anténa**.
+
+Běží jako webová aplikace (PWA) — po první návštěvě i offline. Postaveno v konverzaci
+s AI; data z veřejných rozvrhů (HFCC, AOKI, EiBi). Podrobnosti o přesnosti a licencích
+najdeš níže a v [`legal.html`](legal.html).
 
 ## Soubory
 
