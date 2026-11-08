@@ -6,7 +6,7 @@ Dvě funkce v jednom souboru (společný datový základ pro PWA dx-radar.html):
 
   1. HARVESTER:  stáhne aktuální rozvrh EiBi (sked-*.csv), spáruje země ITU kódem
                  s přibližnými GPS souřadnicemi, označí čínské vysílače
-                 (isChina: true) a vygeneruje eibi_b26.json pro import do PWA.
+                 (isChina: true) a vygeneruje schedule.json (+ schedule_eibi.json) pro PWA.
 
   2. CLI RADAR:  s parametrem --now vypíše stejný "DX Radar" jako PWA přímo
                  do terminálu. Skóre počítá 1:1 stejně jako aplikace - obě
@@ -198,6 +198,12 @@ def _load_scoring():
 
 SCORING = _load_scoring()
 
+
+def jround(x):
+    """Zaokrouhlení jako JS Math.round() (half-up k +∞), ne bankéřské jako Python
+    round(). Nutné, aby CLI skóre sedělo 1:1 s PWA i na hodnotách X.5."""
+    return math.floor(x + 0.5)
+
 # Vzorek databáze (fallback pro --now bez dat; identický s PWA, aby výstupy seděly)
 SAMPLE_DB = [
     {"freq": 5995, "start": "19:00", "end": "23:00", "station": "ORTM Radio Mali", "country": "MLI", "lang": "Fr/Bambara", "site": "Bamako", "lat": 12.65, "lon": -8.00, "kw": 50, "isChina": False},
@@ -241,13 +247,13 @@ def calc_geodesic(lat1, lon1, lat2, lon2):
     y = math.sin(dl) * math.cos(p2)
     x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
     bearing = math.degrees(math.atan2(y, x)) % 360
-    return round(dist), round(bearing)
+    return jround(dist), jround(bearing)
 
 
 def compass_dir(az):
     dirs = ['S', 'SSV', 'SV', 'VSV', 'V', 'VJV', 'JV', 'JJV',
             'J', 'JJZ', 'JZ', 'ZJZ', 'Z', 'ZSZ', 'SZ', 'SSZ']  # sever/východ/jih/západ
-    return dirs[round(az / 22.5) % 16]
+    return dirs[jround(az / 22.5) % 16]
 
 
 def band_name(freq):
@@ -707,7 +713,7 @@ def save_json(records, out_json, sources=None):
 
 def load_schedule(args):
     """DB pro --now: všechny dostupné zdroje sloučené dohromady -
-    eibi.json z --sync (HFCC + AOKI) plus sked_eibi.csv (EiBi), dedup
+    schedule.json z --sync (HFCC + AOKI) plus sked_eibi.csv (EiBi), dedup
     dle freq+start+end (priorita: co je dřív v seznamu, to vyhrává).
     --json/--csv úplně přebíjí (jeden explicitní zdroj)."""
     if args.json:
@@ -719,7 +725,7 @@ def load_schedule(args):
     import os
     parts, labels = [], []
     js = None
-    for cand in (DEFAULT_OUT_JSON, "eibi_b26.json"):
+    for cand in (DEFAULT_OUT_JSON,):
         try:
             with open(cand, encoding="utf-8") as f:
                 js = json.load(f)
@@ -776,9 +782,10 @@ def passes_days(st, now_dt):
 def solar_elevation(lat, lon, dt):
     """Elevace Slunce (°) nad bodem v daném UTC čase (pro denní absorpci)."""
     rad = math.pi / 180
-    doy = dt.timetuple().tm_yday
-    decl = -23.44 * math.cos(rad * (360 / 365) * (doy + 10))
+    # fractional day-of-year (vč. hodin), ať sedí s JS: doy = (d - UTC(rok,0,0))/den
     hour_utc = dt.hour + dt.minute / 60
+    doy = dt.timetuple().tm_yday + hour_utc / 24
+    decl = -23.44 * math.cos(rad * (360 / 365) * (doy + 10))
     solar_time = hour_utc + lon / 15
     ha = (solar_time - 12) * 15
     return math.degrees(math.asin(
@@ -797,7 +804,7 @@ def day_absorption(freq, my_lat, my_lon, st_lat, st_lon, dt):
     if sun_el <= 0:
         return 0
     freq_factor = (da["freqCeilKHz"] - freq) / da["freqCeilKHz"]
-    return -round(math.sin(math.radians(sun_el)) * freq_factor * da["maxPenalty"])
+    return -jround(math.sin(math.radians(sun_el)) * freq_factor * da["maxPenalty"])
 
 
 def muf_estimate(sfi, utc_hours, path_sunlit=False):
@@ -805,7 +812,7 @@ def muf_estimate(sfi, utc_hours, path_sunlit=False):
     m = SCORING["muf"]
     base = m["const"] + m["sfiMul"] * sfi
     daytime = (m["dayStartH"] <= utc_hours <= m["dayEndH"]) or path_sunlit
-    return round((base + m["dayBoost"]) if daytime else base)
+    return jround((base + m["dayBoost"]) if daytime else base)
 
 
 def propagation_adjust(freq, bearing, sfi, kp, utc_hours, path_sunlit=False):
@@ -829,9 +836,9 @@ def skip_term(freq, dist):
     floor = min(max((f_mhz - sk["pivotMHz"]) * sk["slopeKmPerMHz"], 0), sk["floorCapKm"])
     s = 0
     if dist < floor:
-        s -= round((floor - dist) / floor * sk["nearPenaltyMax"])
+        s -= jround((floor - dist) / floor * sk["nearPenaltyMax"])
     if dist > sk["farStartKm"]:
-        s -= round((dist - sk["farStartKm"]) / sk["farDivKm"] * sk["farPenaltyMul"])
+        s -= jround((dist - sk["farStartKm"]) / sk["farDivKm"] * sk["farPenaltyMul"])
     return s
 
 
@@ -857,11 +864,11 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp):
     diff = abs(bearing - az_balcony)
     if diff > 180:
         diff = 360 - diff
-    balcony_bonus = round(math.cos(math.radians(diff)) * SCORING["balcony"]["amp"])
+    balcony_bonus = jround(math.cos(math.radians(diff)) * SCORING["balcony"]["amp"])
 
     tk = SCORING["takeoff"]
     alt_factor = min(alt / tk["altDivM"], tk["altCap"])
-    takeoff = round(alt_factor * tk["farMul"]) if dist > tk["farDistKm"] else round(alt_factor * tk["nearMul"])
+    takeoff = jround(alt_factor * tk["farMul"]) if dist > tk["farDistKm"] else jround(alt_factor * tk["nearMul"])
 
     beam_adj = 0
     az_tx = st.get("azimuth") or 0
@@ -886,7 +893,7 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp):
             antenna += a["youloopAirspyBonus"]
 
     rx_bonus = SCORING["rxBonus"].get(rx, 0)
-    power = round(math.log10(max(st.get("kw") or 0, 1) / SCORING["power"]["centerKw"]) * SCORING["power"]["mul"])
+    power = jround(math.log10(max(st.get("kw") or 0, 1) / SCORING["power"]["centerKw"]) * SCORING["power"]["mul"])
 
     path_sunlit = solar_elevation((lat + st["lat"]) / 2, (lon + st["lon"]) / 2, now) > 0
     prop_adj = propagation_adjust(st["freq"], bearing, sfi, kp, utc_hour, path_sunlit)
@@ -913,7 +920,7 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp):
         qrm_penalty = q["adjacent"]
         tip = f"QRM z {st['freq'] - 5} kHz ({qrm_minus5['station']}) -> Přepni na USB, BFO 00, BW 2.5 kHz!"
     if ant == "youloop" and q.get("loopHalves"):
-        qrm_penalty = round(qrm_penalty / 2)
+        qrm_penalty = jround(qrm_penalty / 2)
 
     raw = (SCORING["base"] + rx_bonus
            + balcony_bonus * w["balcony"]
@@ -923,17 +930,17 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp):
            + skip * w["skip"]
            + qrm_penalty)
     cl = SCORING["clamp"]
-    score = max(cl["min"], min(cl["max"], round(raw)))
-    return {"dist": dist, "bearing": bearing, "diff": round(diff), "score": score, "tip": tip}
+    score = max(cl["min"], min(cl["max"], jround(raw)))
+    return {"dist": dist, "bearing": bearing, "diff": jround(diff), "score": score, "tip": tip}
 
 
 def score_stations(db, qth, rx="pl330", ant="whip", sfi=None, kp=None,
                    hide_china=True, now_minutes=None, limit=10):
+    """Pětistupňové síto: azimutová maska, výška, anténa, výkon, QRM kolize."""
     if sfi is None:
         sfi = SCORING["spaceWeatherDefault"]["sfi"]
     if kp is None:
         kp = SCORING["spaceWeatherDefault"]["kp"]
-    """Pětistupňové síto: azimutová maska, výška, anténa, výkon, QRM kolize."""
     now_dt = datetime.now(timezone.utc)
     if now_minutes is None:
         now_minutes = now_dt.hour * 60 + now_dt.minute
@@ -1074,7 +1081,7 @@ def main():
         description="eibi_sync.py - Data Harvester + CLI radar pro Balkónový DX Engine")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--sync", action="store_true",
-                      help="stáhnout rozvrhy (HFCC + EiBi) a vygenerovat JSON pro PWA (default)")
+                      help="stáhnout rozvrhy (HFCC + AOKI + EiBi) a vygenerovat JSON pro PWA (default)")
     mode.add_argument("--now", action="store_true",
                       help="vypsat aktuální DX radar do terminálu")
     ap.add_argument("--source", default="all", choices=["all", "hfcc", "aoki", "eibi"],

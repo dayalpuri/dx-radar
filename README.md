@@ -106,10 +106,13 @@ The repository is the single source of truth. After a season change (end of Octo
 end of March):
 
 ```bash
-python3 eibi_sync.py --sync          # new schedule.json
-git add schedule.json && git commit -m "B26: schedule update" && git push
+python3 eibi_sync.py --sync          # new schedule.json + schedule_eibi.json (+ .meta)
+git add schedule.json schedule.meta.json schedule_eibi.json schedule_eibi.meta.json
+git commit -m "B26: schedule update" && git push
 # on next online open, mobile picks up fresh data from Pages
 ```
+
+(Normally you don't do this by hand — the daily GitHub cron commits these for you.)
 
 ## Mobile GPS fallback
 

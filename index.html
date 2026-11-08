@@ -2138,8 +2138,7 @@ document.querySelectorAll('#mainTabs .main-tab').forEach(tab => {
   });
 });
 
-// Import kompletní databáze (JSON z eibi_sync.py nebo surové CSV z eibispace.de)
-let userImported = false; // ruční import má přednost před auto-načtením schedule.json
+// Data: schedule.json z repa (generuje eibi_sync.py --sync; viz autoLoadSchedule)
 
 // EiBi doplněk (schedule_eibi.json): stanice mimo HFCC/AOKI, poloha jen orientační
 // (centroid země). Default vypnuto; uživatel zapne přepínačem „+ EiBi".
@@ -2163,169 +2162,6 @@ async function applyEibiExtra() {
 }
 function setBaseDb(db) { BASE_DB = db; applyEibiExtra(); }
 
-// ITU kódy -> přibližné GPS vysílacího uzlu (port z eibi_sync.py)
-const COUNTRY_COORDS = {
-  MLI:[12.65,-8.00], TZA:[-6.10,39.26], ETH:[8.88,38.78], MDG:[-18.87,47.50], NGA:[9.05,7.49],
-  ZAF:[-26.55,28.01], EGY:[31.18,30.05], TUR:[39.93,32.85], GRC:[38.40,23.60], IRN:[29.45,55.68],
-  IND:[13.23,77.70], VNM:[21.13,105.50], MMR:[16.86,96.19], IDN:[-5.14,119.43], MYS:[2.99,101.78],
-  THA:[14.02,100.52], BRA:[-15.60,-47.90], CHN:[39.90,116.40], ROU:[44.75,26.10], ARS:[24.71,46.67],
-  OMA:[23.58,58.38], CUB:[22.95,-82.40], USA:[38.90,-77.00], KOR:[37.55,126.90], JPN:[35.68,139.69],
-  PHL:[14.58,120.97], AUS:[-33.87,151.21], CAN:[45.42,-75.70], GBR:[51.48,-0.45], FRA:[47.65,1.30],
-  DEU:[50.85,9.65], ESP:[40.42,-3.70], ITA:[41.90,12.50], PRT:[38.75,-9.15], NLD:[52.20,5.40],
-  BEL:[50.85,4.35], SWE:[59.33,18.07], NOR:[59.90,10.75], FIN:[60.45,25.00], RUS:[55.75,37.62],
-  UKR:[50.45,30.52], POL:[52.23,21.00], CZE:[50.09,14.30], SVK:[48.15,17.10], HUN:[47.50,19.05],
-  AUT:[48.20,16.37], SUI:[46.95,7.45], ISR:[31.90,34.90], JOR:[32.00,36.00], LBN:[33.90,35.50],
-  SYR:[33.50,36.30], IRQ:[33.30,44.40], PAK:[33.70,73.10], BGD:[23.80,90.40], LKA:[6.90,79.90],
-  NPL:[27.70,85.30], KAZ:[43.25,76.90], UZB:[41.30,69.25], TKM:[38.00,63.20], KGZ:[42.87,74.60],
-  TWN:[24.71,121.00], PRK:[39.00,125.75], MNG:[47.90,106.90], ARG:[-34.60,-58.38], CHL:[-33.45,-70.67],
-  PER:[-12.05,-77.00], COL:[4.60,-74.08], VEN:[10.50,-66.90], ECU:[-0.15,-78.35], BOL:[-16.50,-68.15],
-  PRY:[-25.28,-57.60], URY:[-34.90,-56.20], MEX:[19.40,-99.10], GTM:[14.60,-90.50], CRI:[9.90,-84.10],
-  HND:[14.10,-87.20], DZA:[36.75,3.05], LBY:[32.85,13.20], TUN:[36.80,10.18], MAR:[33.60,-7.60],
-  SDN:[15.60,32.50], SSD:[4.85,31.60], ERI:[15.33,38.93], DJI:[11.60,43.15], SOM:[2.05,45.33],
-  KEN:[-1.28,36.80], UGA:[0.32,32.60], COD:[-4.30,15.30], COG:[-4.25,15.25], CMR:[3.87,11.52],
-  GAB:[0.42,9.47], CIV:[6.70,-5.30], SEN:[14.70,-17.40], GHA:[5.60,-0.17], BFA:[12.35,-1.50],
-  ZMB:[-15.40,28.30], ZWE:[-17.80,31.05], MOZ:[-25.97,32.58], MWI:[-13.95,33.78], NAM:[-22.50,17.05],
-  AGO:[-8.80,13.25], GNQ:[3.75,8.78], ARE:[24.43,54.48], QAT:[25.28,51.52], KWT:[29.35,47.95],
-  BHR:[26.20,50.58], AFG:[34.50,69.20], BLR:[53.90,27.55], MDA:[47.00,28.85], SRB:[44.80,20.48],
-  HRV:[45.80,16.00], BIH:[43.85,18.40], SVN:[46.05,14.50], MKD:[41.98,21.43], BGR:[42.70,23.35],
-  ALB:[41.33,19.45], GEO:[41.70,44.80], ARM:[40.18,44.50], AZE:[40.40,49.85], IRL:[53.30,-6.30],
-  DNK:[56.30,9.50], ISL:[64.13,-21.90], LUX:[49.60,6.10], CYP:[35.15,33.38], MLT:[35.85,14.50],
-  PNG:[-9.45,147.20], NCL:[-22.28,166.40], VUT:[-17.75,168.30]
-};
-const CHINA_ITU = new Set(["CHN"]);
-const CHINA_PATTERNS = ["CRI", "China Radio", "CNR", "China National", "PBS ", "Voice of Strait", "Chinese"];
-
-// Parser surového sked-*.csv z eibispace.de (port z eibi_sync.py, bez závislostí)
-function parseEibiCsv(text) {
-  const records = [];
-  const rows = text.split(/\r?\n/);
-  for (const line of rows) {
-    const row = line.split(';');
-    if (row.length < 5) continue;
-    const freq = Math.round(parseFloat(row[0]));
-    if (!isFinite(freq) || freq < 2300 || freq > 26100) continue;
-    const timeRaw = row[1].trim();
-    if (!/^\d{4}-\d{4}$/.test(timeRaw)) continue;
-    const [s, en] = timeRaw.split('-');
-    const country = row[3].trim();
-    const station = row[4].trim();
-    if (!country || !station || !(country in COUNTRY_COORDS)) continue;
-    const [lat, lon] = COUNTRY_COORDS[country];
-    const isChina = CHINA_ITU.has(country) || CHINA_PATTERNS.some(p => station.includes(p));
-    records.push({
-      freq,
-      start: s.slice(0, 2) + ':' + s.slice(2),
-      end: en.slice(0, 2) + ':' + en.slice(2),
-      station,
-      country,
-      lang: (row[5] || '').trim(),
-      site: ((row[7] || '').trim()) || station,
-      lat, lon,
-      kw: isChina ? 500 : 100,
-      isChina
-    });
-  }
-  return records;
-}
-
-// HFCC (hfcc.org) - druhý velký seznam: přesné souřadnice vysílačů, výkony,
-// azimuty antén a dny vysílání. Port parseru z eibi_sync.py.
-const HFCC_LANG = {Eng:'English',Cmn:'Mandarin',Man:'Mandarin',Zho:'Chinese',Spa:'Spanish',
-Rus:'Russian',Ukr:'Ukrainian',Bel:'Belarusian',Urd:'Urdu',Per:'Persian',Dri:'Dari',Ara:'Arabic',
-Hin:'Hindi',Ben:'Bengali',Snd:'Sindhi',Pan:'Punjabi',Mar:'Marathi',Guj:'Gujarati',Tam:'Tamil',
-Tel:'Telugu',Kan:'Kannada',Mal:'Malayalam',Nld:'Dutch',Dch:'Dutch',Fre:'French',Ger:'German',
-Ita:'Italian',Por:'Portuguese',Pol:'Polish',Cze:'Czech',Slk:'Slovak',Hun:'Hungarian',
-Rom:'Romanian',Bul:'Bulgarian',Ser:'Serbian',Cro:'Croatian',Alb:'Albanian',Mac:'Macedonian',
-Sln:'Slovenian',Gre:'Greek',Tur:'Turkish',Vtn:'Vietnamese',Tha:'Thai',Bur:'Burmese',
-Sin:'Sinhala',Kmr:'Khmer',Lao:'Lao',Kor:'Korean',Jpn:'Japanese',Uzn:'Uzbek',Kaz:'Kazakh',
-Amh:'Amharic',Oro:'Oromo',Som:'Somali',Swa:'Swahili',Hau:'Hausa',Yor:'Yoruba',Ful:'Fulani',
-Tgl:'Tagalog',Ind:'Indonesian',Mly:'Malay',Swd:'Swedish',Nor:'Norwegian',Dan:'Danish',
-Fin:'Finnish',Est:'Estonian',Lat:'Latvian',Lit:'Lithuanian',Heb:'Hebrew',Aze:'Azerbaijani',
-Arm:'Armenian',Geo:'Georgian',Uig:'Uyghur',Tib:'Tibetan',Mon:'Mongolian',Pas:'Pashto',
-Nep:'Nepali',Ass:'Assamese',Ory:'Odia',Bis:'Bislama',Cat:'Catalan',Gln:'Galician',Ice:'Icelandic'};
-
-function parseHfccSite(text) {
-  // site.txt: KÓD Název místa  ADM  lat(46N57) lon(001E59)
-  const sites = {};
-  for (const line of text.split(/\r?\n/)) {
-    const m = line.match(/^(\S+)\s+(.+?)\s+([A-Z]{1,3})\s+(\d{2})([NS])(\d{2})\s+(\d{3})([EW])(\d{2})/);
-    if (!m) continue;
-    let lat = parseInt(m[4], 10) + parseInt(m[6], 10) / 60;
-    let lon = parseInt(m[7], 10) + parseInt(m[9], 10) / 60;
-    if (m[5] === 'S') lat = -lat;
-    if (m[8] === 'W') lon = -lon;
-    sites[m[1]] = { name: m[2].trim(), lat: Math.round(lat * 1000) / 1000, lon: Math.round(lon * 1000) / 1000 };
-  }
-  return sites;
-}
-
-function parseHfccTable(text) {
-  // admin/broadcas tabulky: KÓD (3 znaky) + název
-  const out = {};
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim() || line.trimStart().startsWith(';')) continue;
-    const code = line.slice(0, 3).trim();
-    const name = line.slice(3, 53).trim() || line.slice(3).trim();
-    if (code && name && /[A-Za-z]/.test(code[0])) out[code] = name;
-  }
-  return out;
-}
-
-function hfccTdateExpired(t) {
-  // TDATE je DDMMYY (270327 = 27. 3. 2027)
-  if (!/^\d{6}$/.test(t)) return false;
-  const end = new Date(Date.UTC(2000 + parseInt(t.slice(4), 10), parseInt(t.slice(2, 4), 10) - 1, parseInt(t.slice(0, 2), 10)));
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  return end < today;
-}
-
-function parseHfccSchedule(text, sites, brc) {
-  // Řádky mají proměnnou šířku polí (CIRAF/ZONES, AFRQ) - parsuje se regexem
-  // ukotveným na strukturu: FREQ STRT STOP ... LOC POWR AZIM SLW ANT DAYS FDATE TDATE MOD ...
-  const rowRx = new RegExp('^\\s*(\\d{4,5})\\s+(\\d{4})\\s+(\\d{4})\\s+' +
-    '.*?\\s+([A-Z0-9-]{1,5})\\s+' +
-    '(\\d{1,4})\\s+(\\d{1,3})\\s+(\\d)\\s+(\\d{1,4})\\s+(\\d{1,7})\\s+' +
-    '(\\d{6})\\s+(\\d{6})\\s+([A-Z])\\s+' +
-    '(?:(\\d{4,5})\\s+)?' +
-    '(?:([A-Za-z]{3})\\s+)?' +
-    '(.*)$');
-  const records = [];
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim() || line.trimStart().startsWith(';')) continue;
-    const m = line.match(rowRx);
-    if (!m) continue;
-    const [_, freqS, startR, endR, loc, powrS, azimS, _slw, _ant, days, _fd, tdate, _mod, _afrq, langCode, tail] = m;
-    const freq = parseInt(freqS, 10);
-    if (freq < 2300 || freq > 26100) continue;
-    if (hfccTdateExpired(tdate)) continue;
-    if (!sites[loc]) continue;
-    const site = sites[loc];
-    const kw = (/^\d+$/.test(powrS) && parseInt(powrS, 10) > 0) ? parseInt(powrS, 10) : 100;
-    const azimuth = /^\d+$/.test(azimS) ? parseInt(azimS, 10) : 0;
-    const tokens = tail.trim().split(/\s+/).filter(Boolean);
-    const adm = tokens[0] || '';
-    const brcCode = tokens[1] || tokens[0] || '';
-    const station = (brcCode && brc[brcCode]) ? brc[brcCode] : (brcCode || site.name);
-    const lc = (langCode || '').charAt(0).toUpperCase() + (langCode || '').slice(1).toLowerCase();
-    const isChina = adm === 'CHN' || CHINA_PATTERNS.some(p => station.includes(p));
-    records.push({
-      freq,
-      start: startR.slice(0, 2) + ':' + startR.slice(2),
-      end: endR.slice(0, 2) + ':' + endR.slice(2),
-      station,
-      country: adm,
-      lang: HFCC_LANG[lc] || (lc || '?'),
-      site: site.name,
-      lat: site.lat, lon: site.lon,
-      kw,
-      isChina,
-      azimuth,
-      days: (days === '' || days === '1234567') ? '' : days
-    });
-  }
-  return records;
-}
 
 // (in-app stahování rozvrhů přes 3rd-party proxy odstraněno — appka čte
 // čerstvý schedule.json z repa, který denně generuje GitHub cron.)
@@ -2475,7 +2311,7 @@ async function autoLoadSchedule() {
     const r = await fetch('schedule.json', { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const db = await r.json();
-    if (Array.isArray(db) && db.length && !userImported) {
+    if (Array.isArray(db) && db.length) {
       setBaseDb(db);
       info.textContent = tr("loaded_n", { n: db.length });
     }
