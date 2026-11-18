@@ -28,9 +28,9 @@ export function loadEngine(repo = REPO, override = {}) {
   vm.runInContext(fs.readFileSync(`${repo}/scoring.js`, 'utf8'), ctx);
   ctx.SCORING = deepMerge(ctx.window.SCORING, override);
   vm.runInContext(engine + `;globalThis.API = { scoreStation, dedupActive, passesDay, stationKey, isTimeActive,
-    calcGeodesic, mufEstimate, pathDaylight, propagationAdjust, solarElevation, solarDeclination,
+    calcGeodesic, mufEstimate, ionoPath, foF2Estimate, hopGeometry, solarElevation, solarDeclination,
     SPACE_WX, WEIGHTS, SCORING, setBlacklist: b => { BLACKLIST = b; BLACKLIST_ON = true; },
-    isBlacklisted, memoryAdjust, obsFromNightdx, obsFromLog, setHeardObs,
+    isBlacklisted, memoryAdjust, obsFromNightdx, obsFromLog, setHeardObs, parseSnapshotText, snapshotText,
     setHeardOn: v => { HEARD_ON = v; } };`, ctx);
   return ctx.API;
 }
@@ -41,16 +41,18 @@ export function parseOverrideArg(argv) {
 }
 
 // stations_calibration.txt: blok "YYYY-MM-DD,H:MM" + řádky "kHz,kvalita" (0 = neslyšeno).
-// Časy: ráno/večer = CET (UTC+1); polední 12:10 = UTC (jen tak sedí s rozvrhem).
+// Časy: s třetím polem UTC ("2026-11-18,20:21,UTC", tak exportuje radar) jsou v UTC;
+// bez něj ráno/večer = CET (UTC+1); polední 12:10 = UTC (jen tak sedí s rozvrhem).
 export function loadSnapshots(repo = REPO, file = 'stations_calibration.txt') {
   const FIX = { 1535: 15350 }; // překlep (1535 kHz = SV, mimo rozsah)
   const snaps = [];
   for (const block of fs.readFileSync(`${repo}/${file}`, 'utf8').trim().split(/\n\s*\n/)) {
-    const lines = block.trim().split('\n');
-    const [d, t] = lines[0].split(',');
+    const lines = block.trim().split('\n').filter(l => !l.trim().startsWith('#'));
+    if (!lines.length) continue;
+    const [d, t, zone] = lines[0].split(',').map(x => x.trim());
     const [hh, mm] = t.split(':').map(Number);
     let utc = new Date(Date.UTC(...d.split('-').map((v, i) => i === 1 ? v - 1 : +v), hh - 1, mm));
-    if (d === '2026-11-07' && t === '12:10') utc = new Date(Date.UTC(2026, 10, 7, 12, 10));
+    if (/^utc$/i.test(zone || '') || (d === '2026-11-07' && t === '12:10')) utc = new Date(utc.getTime() + 3600000);
     const gt = new Map();
     for (const l of lines.slice(1)) { let [f, q] = l.split(',').map(Number); f = FIX[f] || f; gt.set(f, q); }
     snaps.push({ label: `${d} ${t}`, utc, gt });

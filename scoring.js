@@ -9,11 +9,35 @@
  * bez JS výrazů), aby ho Python spolehlivě rozparsoval. Laď jen tady — změna
  * se propíše do aplikace i do CLI radaru, takže se obě strany nerozejdou.
  *
- * muf: noční MUF = const + sfiMul·SFI + seasonNight·(deklinace/23,44°); den přidá
- * dayBoost (plynule podle osvětlení středu trasy mezi smoothFromDeg a smoothToDeg;
- * −18° = astronomický soumrak, kdy zhasne vrstva F2 ve ~300 km). seasonNight: letní
- * noční F2 vrstva nestihne zrekombinovat (krátká noc, vyšší noční foF2), zimní ano -
- * v létě tedy noční MUF o několik MHz výš, v zimě níž (v den je člen nulový).
+ * iono: propagační a skip člen počítané po skocích přes vrstvu F2 (výška layerKm,
+ * skok nejvýš maxHopKm, paprsek nejníž minElevDeg nad obzorem). V bodě odrazu každého
+ * skoku se odhadne kritický kmitočet foF2:
+ *   den   = dayBase + dayFlux·s, kde s = (SFI − 60)/140 (0 až 1,5),
+ *   noční minimum = nightBase + nightFlux·s ± sezóna (seasonSummer / seasonWinter krát
+ *     deklinace/23,44° pro danou polokouli; letní noc vrstva nestihne zaniknout, proto
+ *     je letní přídavek větší než zimní úbytek), nejméně nightFloor,
+ *   večer = minimum + eveFrac·(den − minimum), klesá lineárně decayH hodin od 18 h
+ *     místního slunečního času,
+ *   přechod den/noc plynule podle výšky Slunce mezi smoothFromDeg (−18° = Slunce už
+ *     nesvítí ani do výšky vrstvy) a smoothToDeg, vyhodnocené o lagH hodin dřív.
+ *   polarMul / equatorDayBoost = hrubá oprava pro šířky nad 60° a pod 25°; při Kp nad
+ *     stormKp klesá foF2 o stormDrop na stupeň Kp.
+ * MUF trasy = nejnižší foF2 ze všech skoků × šikmý faktor M skoku. Šance, že kmitočet
+ * projde, je logistická křivka kolem MUF se šířkou mufSigma·MUF; neprojde-li, stojí to
+ * až mufPenalty bodů. Ta se dělí na dva členy: co neprojde ani nejdelším skokem, je
+ * zavřené pásmo (propagační člen); co by prošlo delším skokem, ale ne na tuhle
+ * vzdálenost, je mrtvá zóna (skip člen).
+ * Propagační člen dál odečte absorpci vrstvy D (George & Bradley, dB na skok ×
+ * absMul, nejvýš absCap) a polární útlum (skoky nad auroraLat při Kp nad auroraKp,
+ * auroraPerKp bodů na stupeň, nejvýš auroraCap).
+ * Skip člen dál odečte útlum vzdáleností: lossMul × (20·log10(délka paprsku/refKm)
+ * + hopLossDb na každý další skok), v mezích −lossCap až +nearBonusCap. refKm je
+ * vzdálenost s nulovým útlumem; nastavená tak, aby se úroveň skóre proti dřívějšímu
+ * modelu neposunula (hranice 50/68 zůstávají).
+ * Laděno 11/2026 proti balkonovým snímkům (tools/calib.mjs) a 4 nocím z NightDX
+ * (tools/memory_eval.mjs, sloupec „bez paměti"): AUC 0,65 → 0,70 na NightDX, balkon
+ * beze zhoršení. Sezónní část (léto) stojí jen na fyzice a pár letních úlovcích
+ * (tools/heard_check.mjs), měřená data jsou zatím jen z listopadu.
  *
  * dedup.sameSiteKm: dva záznamy s přesnou polohou (HFCC/AOKI, ne EiBi centroid)
  * na stejném kmitočtu ve stejnou chvíli do této vzdálenosti = jeden vysílací komplex
@@ -37,6 +61,8 @@
  * amp·(slyšeno − n·baseline)/(n + k). baseline = obvyklý podíl slyšených pokusů, takže
  * jedno „neslyšeno" ubere málo a jedno „slyšeno" přidá hodně; k tlumí jediné pozorování.
  * heardMinDb = od kolika dB modulace nad šumem se nahrávka NightDX počítá jako slyšená.
+ * Paměť se učí zvlášť pro každý přijímač (pozorování nese klíč přijímače; cizí přijímač
+ * první desítku spíš kazil).
  * Ověřeno na 4 nocích NightDX (11/2026) křížově po nocích: AUC 0,65 → 0,74.
  *
  * Formulový tvar (pořadí členů, MUF/skip/absorpce) je zrcadlený v obou jazycích;
@@ -59,26 +85,15 @@ window.SCORING = {
     "youloopAirspyBonus": 14
   },
   "power": { "centerKw": 100, "mul": 14 },
-  "muf": { "const": 4.5, "sfiMul": 0.09, "dayBoost": 15, "seasonNight": 5,
-    "smoothFromDeg": -18, "smoothToDeg": 14 },
-  "prop": {
-    "aboveMufPenalty": -35,
-    "nearMufPenalty": -14,
-    "mufMarginKHz": 3000,
-    "auroralKp": 5,
-    "auroralFromDeg": 300,
-    "auroralToDeg": 60,
-    "auroralPenalty": -20
-  },
-  "dayAbsorption": { "freqCeilKHz": 10000, "maxPenalty": 40 },
-  "skip": {
-    "pivotMHz": 7,
-    "slopeKmPerMHz": 300,
-    "floorCapKm": 4000,
-    "nearPenaltyMax": 20,
-    "farStartKm": 3000,
-    "farDivKm": 2000,
-    "farPenaltyMul": 8
+  "iono": {
+    "maxHopKm": 3500, "layerKm": 320, "minElevDeg": 3,
+    "dayBase": 7.5, "dayFlux": 6.0, "nightBase": 3.0, "nightFlux": 2.5, "nightFloor": 1.5,
+    "seasonSummer": 2.5, "seasonWinter": 1.0, "eveFrac": 0.55, "decayH": 7, "lagH": 0, "smoothFromDeg": -18, "smoothToDeg": 14,
+    "polarMul": 0.8, "equatorDayBoost": 0.15, "stormKp": 4, "stormDrop": 0.05,
+    "mufSigma": 0.1, "mufPenalty": 45,
+    "absMul": 0.5, "absCap": 45,
+    "auroraLat": 55, "auroraKp": 3, "auroraPerKp": 4, "auroraCap": 20,
+    "refKm": 3200, "lossMul": 1.2, "hopLossDb": 2, "lossCap": 60, "nearBonusCap": 12
   },
   "qrm": { "coChannel": -25, "adjacent": -8, "adjacentBoth": -16, "loopHalves": true,
     "minInterfererScore": 45, "louderMargin": 3 },

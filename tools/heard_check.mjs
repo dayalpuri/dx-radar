@@ -1,9 +1,10 @@
-// Kontrola MUF/propagačního členu proti slyšeným stanicím z logů (tools/logs_heard.csv):
-// pro každý úlovek spočítá MUF a prop člen aktuálního kódu a s přepsanými konstantami.
-// Jen pozitiva (co šlo) - hlídá, že změna MUF modelu nezabije prokazatelné úlovky v jiném
-// ročním období než kalibrační snímky. Rozvrh pro ty dny není, proto jen tento člen.
+// Kontrola propagačního a skip členu proti slyšeným stanicím z logů (tools/logs_heard.csv):
+// pro každý úlovek spočítá MUF trasy a oba členy aktuálního kódu a s přepsanými konstantami.
+// Jen pozitiva (co šlo) - hlídá, že změna modelu ionosféry nezabije prokazatelné úlovky
+// v jiném ročním období než kalibrační data (ta jsou jen z listopadu). Rozvrh pro ty dny
+// není, proto jen tyto dva členy. Bez --override vypíše úlovky, které model sám sráží.
 //
-//   node tools/heard_check.mjs --override '{"muf":{"seasonNight":0,"const":1}}' [--sfi 125] [--all]
+//   node tools/heard_check.mjs [--override '{"iono":{"seasonSummer":1}}'] [--sfi 125] [--all]
 import fs from 'fs';
 import { loadEngine, parseOverrideArg, REPO } from './engine.mjs';
 
@@ -14,22 +15,24 @@ const sites = JSON.parse(fs.readFileSync(`${REPO}/tools/sites.json`, 'utf8'));
 const rows = fs.readFileSync(`${REPO}/tools/logs_heard.csv`, 'utf8').split('\n')
   .filter(l => l && !l.startsWith('#') && !l.startsWith('utc,')).map(l => l.split(','));
 
-const CUR = loadEngine(), ALT = loadEngine(undefined, parseOverrideArg(argv));
+const override = parseOverrideArg(argv), hasAlt = Object.keys(override).length > 0;
+const CUR = loadEngine(), ALT = loadEngine(undefined, override);
 const term = (A, d, la, lo, sl, so, f) => {
-  const dl = A.pathDaylight(la, lo, sl, so, d), decl = A.solarDeclination(d);
-  const brg = A.calcGeodesic(la, lo, sl, so).bearing;
-  return { muf: A.mufEstimate(SFI, dl, decl), prop: A.propagationAdjust(f, brg, SFI, 2, dl, decl) };
+  const dist = A.calcGeodesic(la, lo, sl, so).dist;
+  const p = A.ionoPath(f, la, lo, sl, so, dist, d, SFI, 2);
+  return { ...p, dist, sum: Math.round(p.prop * A.SCORING.weightsDefault.prop + p.skip * A.SCORING.weightsDefault.skip) };
 };
-let worse = 0, better = 0;
-console.log('UTC               kHz  vysílač      QTH       el°   MUF cur/alt  prop cur→alt');
+let worse = 0, better = 0, hard = 0;
+console.log('UTC               kHz  vysílač      QTH          km  MUF cur/alt  prop+skip cur→alt');
 for (const [t, rx, f, site, q] of rows) {
-  const d = new Date(t), [la, lo] = sites.rx[rx], [sl, so] = sites.tx[site];
   if (!sites.rx[rx] || !sites.tx[site]) { console.log('neznámý klíč', rx, site); continue; }
-  const el = CUR.solarElevation((la + sl) / 2, (lo + so) / 2, d);
+  const d = new Date(t), [la, lo] = sites.rx[rx], [sl, so] = sites.tx[site];
   const c = term(CUR, d, la, lo, sl, so, +f), a = term(ALT, d, la, lo, sl, so, +f);
-  const mark = a.prop < c.prop ? '◄ alt horší' : a.prop > c.prop ? '▲ alt lepší' : '';
-  if (a.prop < c.prop) worse++; else if (a.prop > c.prop) better++;
-  if (mark || argv.includes('--all'))
-    console.log(`${t.slice(0, 16)} ${String(f).padStart(5)}  ${site.padEnd(11)} ${rx.padEnd(8)} ${el.toFixed(0).padStart(4)}   ${String(c.muf).padStart(2)}/${String(a.muf).padStart(2)}       ${String(c.prop).padStart(3)}→${String(a.prop).padStart(3)} ${mark}  S${q}`);
+  const mark = a.sum < c.sum ? '◄ alt horší' : a.sum > c.sum ? '▲ alt lepší' : '';
+  if (a.sum < c.sum) worse++; else if (a.sum > c.sum) better++;
+  if (c.sum <= -25) hard++;
+  if (argv.includes('--all') || (hasAlt ? mark : c.sum <= -25))
+    console.log(`${t.slice(0, 16)} ${String(f).padStart(5)}  ${site.padEnd(11)} ${rx.padEnd(8)} ${String(c.dist).padStart(6)}  ${c.muf.toFixed(0).padStart(3)}/${a.muf.toFixed(0).padStart(3)}      ${String(c.sum).padStart(4)}→${String(a.sum).padStart(4)} ${mark}  S${q}`);
 }
-console.log(`\nSFI ${SFI}: slyšených ${rows.length}; override horší u ${worse}, lepší u ${better} (prop člen před váhou)`);
+console.log(`\nSFI ${SFI}: slyšených ${rows.length}; model sráží o 25 b. a víc ${hard} z nich` +
+  (hasAlt ? `; override horší u ${worse}, lepší u ${better}` : ''));

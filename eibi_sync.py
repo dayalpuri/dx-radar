@@ -34,7 +34,7 @@ import os
 import re
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 EIBI_BASE = "http://eibispace.de/dx/"
 # Zimní sezóna (B) platí od poslední říjnové neděle do poslední březnové neděle.
@@ -1030,61 +1030,98 @@ def solar_elevation(lat, lon, dt):
         math.cos(lat * rad) * math.cos(decl * rad) * math.cos(ha * rad)))
 
 
-def day_absorption(freq, my_lat, my_lon, st_lat, st_lon, dt):
-    """Denní absorpce D-vrstvy: osvětlená trasa pod freqCeil je silně tlumená.
-    Shodné s PWA - hlavní oprava fantomových dálkových stanic v poledne."""
-    da = SCORING["dayAbsorption"]
-    if freq >= da["freqCeilKHz"]:
+# ---------------------------------------------------------------------------
+# IONOSFÉRA PO SKOCÍCH (propagační + skip člen) - 1:1 zrcadlo PWA (ionoPath & spol.)
+# Trasa = skoky přes vrstvu F2; v bodě odrazu každého skoku foF2 (Slunce, tok, roční
+# doba, Kp) × šikmý faktor M = MUF, nejslabší skok rozhoduje; tamtéž absorpce vrstvy D.
+# Konstanty: scoring.js -> iono.
+# ---------------------------------------------------------------------------
+R_EARTH = 6371
+
+
+def gc_point(lat1, lon1, lat2, lon2, frac):
+    """Bod ve zlomku frac velké kružnice mezi dvěma místy -> (šířka, délka)."""
+    p1, l1, p2, l2 = map(math.radians, (lat1, lon1, lat2, lon2))
+    h = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin((l2 - l1) / 2) ** 2
+    d = 2 * math.asin(min(1, math.sqrt(h)))
+    if d < 1e-9:
+        return lat1, lon1
+    a, b = math.sin((1 - frac) * d) / math.sin(d), math.sin(frac * d) / math.sin(d)
+    x = a * math.cos(p1) * math.cos(l1) + b * math.cos(p2) * math.cos(l2)
+    y = a * math.cos(p1) * math.sin(l1) + b * math.cos(p2) * math.sin(l2)
+    z = a * math.sin(p1) + b * math.sin(p2)
+    return math.atan2(z, math.sqrt(x * x + y * y)) * 180 / math.pi, math.atan2(y, x) * 180 / math.pi
+
+
+def hop_geometry(hop_km):
+    """Jeden skok: (šikmý faktor M, délka paprsku v km)."""
+    io = SCORING["iono"]
+    th, rh = hop_km / (2 * R_EARTH), R_EARTH + io["layerKm"]
+    elev = max(math.atan2(math.cos(th) - R_EARTH / rh, math.sin(th)), math.radians(io["minElevDeg"]))
+    sin_i = R_EARTH / rh * math.cos(elev)
+    slant = 2 * math.sqrt(rh * rh + R_EARTH * R_EARTH - 2 * R_EARTH * rh * math.cos(th))
+    return 1 / math.sqrt(1 - sin_i * sin_i), max(slant, 2 * io["layerKm"])
+
+
+def fof2_estimate(lat, lon, dt, sfi, kp):
+    """Kritický kmitočet foF2 (MHz) nad bodem; shodné s PWA foF2Estimate()."""
+    io = SCORING["iono"]
+    s = min(1.5, max(0, (sfi - 60) / 140))
+    summer = solar_declination(dt) / 23.44 * (1 if lat >= 0 else -1)
+    day = io["dayBase"] + io["dayFlux"] * s
+    night_min = max(io["nightFloor"], io["nightBase"] + io["nightFlux"] * s
+                    + (io["seasonSummer"] if summer > 0 else io["seasonWinter"]) * summer)
+    el = solar_elevation(lat, lon, dt - timedelta(hours=io["lagH"]))
+    w = min(1, max(0, (el - io["smoothFromDeg"]) / (io["smoothToDeg"] - io["smoothFromDeg"])))
+    lst = (((dt.hour + dt.minute / 60 + lon / 15) % 24) + 24) % 24
+    hn = (lst - 18 + 24) % 24
+    decay = 1 - hn / io["decayH"] if hn < io["decayH"] else 0 if hn < 18 else (hn - 18) / 6
+    night = night_min + io["eveFrac"] * (day - night_min) * decay
+    f = night + (day - night) * w
+    alat = abs(lat)
+    if alat > 60:
+        f *= io["polarMul"]
+    elif alat < 25:
+        f *= 1 + io["equatorDayBoost"] * w
+    if kp > io["stormKp"]:
+        f *= max(0.6, 1 - io["stormDrop"] * (kp - io["stormKp"]) * (1.5 if alat > 50 else 1))
+    return f
+
+
+def absorption_db(f_mhz, zenith, sec_i, sfi):
+    """Absorpce ve vrstvě D na jeden skok v dB (George & Bradley)."""
+    if zenith >= 102:
         return 0
-    mid_lat, mid_lon = (my_lat + st_lat) / 2, (my_lon + st_lon) / 2
-    sun_el = solar_elevation(mid_lat, mid_lon, dt)
-    if sun_el <= 0:
-        return 0
-    freq_factor = (da["freqCeilKHz"] - freq) / da["freqCeilKHz"]
-    return -jround(math.sin(math.radians(sun_el)) * freq_factor * da["maxPenalty"])
+    r12 = max(0, (-0.728 + math.sqrt(0.728 * 0.728 + 4 * 0.00089 * (sfi - 63.7))) / (2 * 0.00089))
+    c = math.pow(max(0, math.cos(math.radians(0.881 * zenith))), 1.3)
+    return 677.2 * sec_i * (1 + 0.0037 * r12) * c / (math.pow(f_mhz + 1.2, 1.98) + 10.2)
 
 
-def muf_estimate(sfi, daylight=0.0, decl=0.0):
-    """MUF odhad; denní posun plynule dle osvětlení prostředku trasy (daylight 0..1,
-    gray-line). decl = deklinace Slunce: letní noční F2 vrstva nestihne zrekombinovat
-    -> noční MUF ±seasonNight MHz (ve dne člen mizí). Shodné s PWA mufEstimate()."""
-    m = SCORING["muf"]
-    return jround(m["const"] + m["sfiMul"] * sfi + m["dayBoost"] * daylight
-                  + m["seasonNight"] * (decl / 23.44) * (1 - daylight))
-
-
-def path_daylight(lat1, lon1, lat2, lon2, dt):
-    """0 = noc (Slunce nad středem trasy <= smoothFromDeg), 1 = den (>= smoothToDeg)."""
-    m = SCORING["muf"]
-    el = solar_elevation((lat1 + lat2) / 2, (lon1 + lon2) / 2, dt)
-    return min(1.0, max(0.0, (el - m["smoothFromDeg"]) / (m["smoothToDeg"] - m["smoothFromDeg"])))
-
-
-def propagation_adjust(freq, bearing, sfi, kp, daylight=0.0, decl=0.0):
-    """Okno LUF-MUF + aurorální absorpce; shodné s PWA propagationAdjust()."""
-    p = SCORING["prop"]
-    muf = muf_estimate(sfi, daylight, decl)
-    adj = 0
-    if freq > muf * 1000 + p["mufMarginKHz"]:
-        adj += p["aboveMufPenalty"]
-    elif freq > muf * 1000 - p["mufMarginKHz"]:
-        adj += p["nearMufPenalty"]
-    if kp >= p["auroralKp"] and (bearing >= p["auroralFromDeg"] or bearing <= p["auroralToDeg"]):
-        adj += p["auroralPenalty"]
-    return adj
-
-
-def skip_term(freq, dist):
-    """Mrtvá zóna (skip) + multi-hop útlum; shodné s PWA skipTerm()."""
-    sk = SCORING["skip"]
+def iono_path(freq, lat1, lon1, lat2, lon2, dist, dt, sfi, kp):
+    """(propagační člen, skip člen) před váhami; shodné s PWA ionoPath()."""
+    io = SCORING["iono"]
     f_mhz = freq / 1000
-    floor = min(max((f_mhz - sk["pivotMHz"]) * sk["slopeKmPerMHz"], 0), sk["floorCapKm"])
-    s = 0
-    if dist < floor:
-        s -= jround((floor - dist) / floor * sk["nearPenaltyMax"])
-    if dist > sk["farStartKm"]:
-        s -= jround((dist - sk["farStartKm"]) / sk["farDivKm"] * sk["farPenaltyMul"])
-    return s
+    d = max(dist, 50)
+    hops = max(1, math.ceil(d / io["maxHopKm"]))
+    m, slant = hop_geometry(d / hops)
+    m_max = hop_geometry(io["maxHopKm"])[0]
+    sec_d = min(m * 0.9, 3.5)
+    f_min, abs_db, aurora = 99, 0, 0
+    for k in range(hops):
+        la, lo = gc_point(lat1, lon1, lat2, lon2, (k + 0.5) / hops)
+        f_min = min(f_min, fof2_estimate(la, lo, dt, sfi, kp))
+        abs_db += absorption_db(f_mhz, 90 - solar_elevation(la, lo, dt), sec_d, sfi)
+        if abs(la) > io["auroraLat"] and kp > io["auroraKp"]:
+            aurora += io["auroraPerKp"] * (kp - io["auroraKp"])
+
+    def is_open(x):  # šance, že kmitočet projde pod MUF x
+        return 1 / (1 + math.exp(-(x - f_mhz) / (io["mufSigma"] * x)))
+
+    p_path, p_band = is_open(f_min * m), is_open(f_min * m_max)
+    loss_db = 20 * math.log10(slant * hops / io["refKm"]) + io["hopLossDb"] * (hops - 1)
+    prop = -io["mufPenalty"] * (1 - p_band) - min(io["absCap"], io["absMul"] * abs_db) - min(io["auroraCap"], aurora)
+    skip = -io["mufPenalty"] * (p_band - p_path) + max(-io["lossCap"], min(io["nearBonusCap"], -io["lossMul"] * loss_db))
+    return jround(prop), jround(skip)
 
 
 def _ant_band(buckets, f):
@@ -1140,10 +1177,7 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
     rx_bonus = SCORING["rxBonus"].get(rx, 0)
     power = jround(math.log10(max(st.get("kw") or 0, 1) / SCORING["power"]["centerKw"]) * SCORING["power"]["mul"])
 
-    daylight = path_daylight(lat, lon, st["lat"], st["lon"], now)
-    prop_adj = propagation_adjust(st["freq"], bearing, sfi, kp, daylight, solar_declination(now))
-    day_absorb = day_absorption(st["freq"], lat, lon, st["lat"], st["lon"], now)
-    skip = skip_term(st["freq"], dist)
+    prop_adj, skip = iono_path(st["freq"], lat, lon, st["lat"], st["lon"], dist, now, sfi, kp)
 
     # QRM jen od rušitelů, kteří na QTH reálně dopadají silněji; active_now=None = bez QRM
     qrm_now = active_now or []
@@ -1178,7 +1212,7 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
            + balcony_bonus * w["balcony"]
            + takeoff + beam_adj + antenna
            + power * w["power"]
-           + (prop_adj + day_absorb) * w["prop"]
+           + prop_adj * w["prop"]
            + skip * w["skip"]
            + qrm_penalty)
     cl = SCORING["clamp"]
