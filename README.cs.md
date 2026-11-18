@@ -59,7 +59,7 @@ z různých sezón se nemíchají.
 ## SWL deník a ověření stanice přes web
 
 - **📝 Log** v každé kartě: kvalita příjmu jedním ťuknutím (0 nic · 1 slabé · 2 čitelné · 3 dobré) + poznámka, uloží se do deníku (localStorage).
-- **🧠 Paměť příjmů**: import exportu z NightDX (`.zip` nebo jednotlivé `.json`); spolu s vlastním deníkem posouvá skóre podle toho, co na stejném kmitočtu ve stejnou denní dobu (±3 h) z téhož QTH už hrálo nebo nehrálo. Zůstává v prohlížeči. Ověření: `node tools/memory_eval.mjs <rozbalený export>`.
+- **🧠 Paměť příjmů**: posouvá skóre podle toho, co na stejném kmitočtu ve stejnou denní dobu (±3 h) z téhož QTH a stejným přijímačem už hrálo nebo nehrálo. Učí se z deníku, z importu NightDX (`.json` nebo `.zip`) a z textového snímku pásma (řádek s časem, pod ním `kHz,kvalita`). Export: vše jako JSON, ruční pozorování jako txt; obojí jde naimportovat zpět. Zůstává v prohlížeči. Ověření: `node tools/memory_eval.mjs <export NightDX>`.
 - **📖 Log** v horní liště: celý deník, mazání záznamů, **📋 Export MD** (Markdown pro Obsidian).
 - **🎧 Stream** v každé kartě: ověření ID přijaté stanice přes její webové streamy
   (databáze radio-browser.info, jen https streamy kvůli mixed-content). Přesné shody ✅,

@@ -737,12 +737,13 @@
       <label class="bl-toggle">
         <input type="checkbox" id="memOn" checked> <span data-i18n="mem_on">Paměť zapnutá</span>
       </label>
-      <label class="bl-hint" data-i18n-html="mem_hint">Skóre se posune podle toho, co na <strong>stejném kmitočtu</strong> ve stejnou denní dobu (±3 h) z tohoto QTH už hrálo nebo nehrálo. Učí se ze dvou zdrojů: z importu <strong>NightDX</strong> (exportní <code>.zip</code> nebo jednotlivé <code>.json</code>) a z každého zápisu v SWL deníku. Export uloží deník i importovaná data do jednoho souboru, který jde zase naimportovat. Data zůstávají jen v tomto prohlížeči.</label>
+      <label class="bl-hint" data-i18n-html="mem_hint">Skóre se posune podle toho, co na <strong>stejném kmitočtu</strong> ve stejnou denní dobu (±3 h) z tohoto QTH už hrálo nebo nehrálo. Učí se ze tří zdrojů: z importu <strong>NightDX</strong> (<code>.json</code> ze skillu nebo exportní <code>.zip</code>), z <strong>textového snímku pásma</strong> (řádek s časem, pod ním <code>kHz,kvalita</code> 0–3; zapisuj i nuly) a z každého zápisu v SWL deníku. Export JSON uloží vše, export txt jen ruční pozorování; obojí jde zase naimportovat. Učí se zvlášť pro každý <strong>přijímač</strong>: NightDX se počítá jako Airspy, snímek a deník podle přijímače zvoleného při zápisu nebo importu. Data zůstávají jen v tomto prohlížeči.</label>
       <div id="memInfo"></div>
-      <input type="file" id="memFile" accept=".zip,.json,application/zip,application/json" multiple>
+      <input type="file" id="memFile" accept=".zip,.json,.txt,.csv,application/zip,application/json,text/plain,text/csv" multiple>
       <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button type="button" class="action-btn" id="btnMemImport" data-i18n="mem_import">📥 Import (NightDX zip / JSON)</button>
+        <button type="button" class="action-btn" id="btnMemImport" data-i18n="mem_import">📥 Import (NightDX, záloha, snímek)</button>
         <button type="button" class="action-btn" id="btnMemExport" data-i18n="mem_export">📤 Export všeho (JSON)</button>
+        <button type="button" class="action-btn" id="btnMemExportTxt" data-i18n="mem_export_txt">📄 Export snímků (txt)</button>
         <button type="button" class="action-btn" id="btnMemClear" data-i18n="mem_clear">🗑 Smazat importovaná data</button>
       </div>
     </div>
@@ -955,11 +956,14 @@ const I18N = {
 };
 Object.assign(I18N.cs, {
   mem_summary: "🧠 Paměť příjmů", mem_on: "Paměť zapnutá", mem_on_n: "(zap, {n} záznamů)",
-  mem_hint: "Skóre se posune podle toho, co na <strong>stejném kmitočtu</strong> ve stejnou denní dobu (±3 h) z tohoto QTH už hrálo nebo nehrálo. Učí se ze dvou zdrojů: z importu <strong>NightDX</strong> (exportní <code>.zip</code> nebo jednotlivé <code>.json</code>) a z každého zápisu v SWL deníku. Export uloží deník i importovaná data do jednoho souboru, který jde zase naimportovat. Data zůstávají jen v tomto prohlížeči.",
-  mem_import: "📥 Import (NightDX zip / JSON)", mem_clear: "🗑 Smazat importovaná data",
+  mem_hint: "Skóre se posune podle toho, co na <strong>stejném kmitočtu</strong> ve stejnou denní dobu (±3 h) z tohoto QTH už hrálo nebo nehrálo. Učí se ze tří zdrojů: z importu <strong>NightDX</strong> (<code>.json</code> ze skillu nebo exportní <code>.zip</code>), z <strong>textového snímku pásma</strong> (řádek s časem, pod ním <code>kHz,kvalita</code> 0–3; zapisuj i nuly) a z každého zápisu v SWL deníku. Export JSON uloží vše, export txt jen ruční pozorování; obojí jde zase naimportovat. Učí se zvlášť pro každý <strong>přijímač</strong>: NightDX se počítá jako Airspy, snímek a deník podle přijímače zvoleného při zápisu nebo importu. Data zůstávají jen v tomto prohlížeči.",
+  mem_import: "📥 Import (NightDX, záloha, snímek)", mem_clear: "🗑 Smazat importovaná data",
+  mem_export_txt: "📄 Export snímků (txt)", mem_snap_empty: "Žádná ruční pozorování k exportu.",
+  mem_snap_exported: "Exportováno {n} ručních pozorování v {b} snímcích.",
+  mem_bad_format: "neznámý formát (čekám zip, JSON nebo textový snímek s časem a kmitočty)",
   mem_export: "📤 Export všeho (JSON)", mem_exported: "Exportováno: {log} zápisů deníku, {n} importovaných pozorování.",
   mem_empty: "Zatím žádná pozorování.",
-  mem_info: "{n} pozorování na {f} kmitočtech, slyšeno {h}, období {from} až {to}, z deníku {log}.",
+  mem_info: "{n} pozorování na {f} kmitočtech, slyšeno {h}, období {from} až {to}, z deníku {log}. Pro zvolený přijímač platí {mine}.",
   mem_imported: "Paměť: přidáno {added} pozorování (slyšeno {heard}) a {log} zápisů deníku, přeskočeno {skipped}.",
   mem_err: "Import se nepovedl: {e}", mem_confirm_clear: "Smazat všechna importovaná pozorování? Deník zůstane.",
   p_mem: "paměť",
@@ -978,11 +982,14 @@ Object.assign(I18N.cs, {
 });
 Object.assign(I18N.en, {
   mem_summary: "🧠 Reception memory", mem_on: "Memory on", mem_on_n: "(on, {n} records)",
-  mem_hint: "The score shifts by what was or was not heard on the <strong>same frequency</strong> at the same time of day (±3 h) from this QTH. It learns from two sources: a <strong>NightDX</strong> import (export <code>.zip</code> or single <code>.json</code> files) and every entry in your SWL log. Export saves the log and the imported data into one file that can be imported again. The data stays in this browser only.",
-  mem_import: "📥 Import (NightDX zip / JSON)", mem_clear: "🗑 Delete imported data",
+  mem_hint: "The score shifts by what was or was not heard on the <strong>same frequency</strong> at the same time of day (±3 h) from this QTH. It learns from three sources: a <strong>NightDX</strong> import (the skill's <code>.json</code> or the export <code>.zip</code>), a <strong>text band snapshot</strong> (a line with the time, then <code>kHz,quality</code> 0–3; write down the zeros too) and every entry in your SWL log. The JSON export saves everything, the txt export only manual observations; both can be imported again. It learns separately for each <strong>receiver</strong>: NightDX counts as Airspy, a snapshot or log entry as the receiver selected when it was written or imported. The data stays in this browser only.",
+  mem_import: "📥 Import (NightDX, backup, snapshot)", mem_clear: "🗑 Delete imported data",
+  mem_export_txt: "📄 Export snapshots (txt)", mem_snap_empty: "No manual observations to export.",
+  mem_snap_exported: "Exported {n} manual observations in {b} snapshots.",
+  mem_bad_format: "unknown format (expected a zip, JSON or a text snapshot with a time and frequencies)",
   mem_export: "📤 Export everything (JSON)", mem_exported: "Exported: {log} log entries, {n} imported observations.",
   mem_empty: "No observations yet.",
-  mem_info: "{n} observations on {f} frequencies, {h} heard, {from} to {to}, {log} from the log.",
+  mem_info: "{n} observations on {f} frequencies, {h} heard, {from} to {to}, {log} from the log. {mine} apply to the selected receiver.",
   mem_imported: "Memory: added {added} observations ({heard} heard) and {log} log entries, skipped {skipped}.",
   mem_err: "Import failed: {e}", mem_confirm_clear: "Delete all imported observations? The log stays.",
   p_mem: "memory",
@@ -1113,15 +1120,18 @@ function fmtParts(p) {
 
 // ── Paměť příjmů ────────────────────────────────────────────────────────────
 // Pozorování „na kmitočtu f v čase t bylo/nebylo slyšet" (import NightDX + SWL deník).
-// Tvar: [kHz, epochMin, kvalita 0–3 (0 = neslyšeno), šířka QTH, délka QTH] (QTH může být null).
+// Tvar: [kHz, epochMin, kvalita 0–3 (0 = neslyšeno), šířka QTH, délka QTH, zdroj, přijímač].
+// Zdroj: n = NightDX, s = ruční snímek, l = deník. Přijímač = klíč z nabídky (pl330, airspy,
+// ats4732) nebo null (neznámý). Paměť se učí jen z pozorování stejným přijímačem: cizí
+// přijímač první desítku spíš kazil (měřeno 11/2026, Tecsun proti Airspy).
 // Konstanty viz scoring.js → memory. Čisté funkce - volá je i tools/memory_eval.mjs.
 let HEARD_MEM = new Map(); // kHz → [{ t, q, lat, lon }]
 let HEARD_ON = true;
 function setHeardObs(obs) {
   HEARD_MEM = new Map();
-  for (const [f, t, q, lat, lon] of obs) {
+  for (const [f, t, q, lat, lon, , rx] of obs) {
     if (!HEARD_MEM.has(f)) HEARD_MEM.set(f, []);
-    HEARD_MEM.get(f).push({ t, q, lat, lon });
+    HEARD_MEM.get(f).push({ t, q, lat, lon, rx: rx || null });
   }
 }
 // Jedna nahrávka NightDX (sidecar JSON / řádek logbooku) → pozorování, nebo null.
@@ -1136,7 +1146,7 @@ function obsFromNightdx(d) {
   const heard = label && label !== 'noise' && mod >= SCORING.memory.heardMinDb;
   const q = !heard ? 0 : mod < 10 ? 1 : mod < 20 ? 2 : 3;
   const ll = v => Number.isFinite(Number(v)) && v != null ? Math.round(Number(v) * 100) / 100 : null;
-  return [khz, Math.round(t / 60000), q, ll(d.rx_lat), ll(d.rx_lon)];
+  return [khz, Math.round(t / 60000), q, ll(d.rx_lat), ll(d.rx_lon), 'n', 'airspy']; // NightDX = Airspy HF+
 }
 // Zápis z SWL deníku → pozorování. Nové zápisy mají kvalitu q 0–3 přímo; staré SINPO
 // se převede z celkového dojmu O (1 = nepoužitelné → neslyšeno).
@@ -1147,10 +1157,13 @@ function obsFromLog(e) {
   const q = Number.isFinite(e.q) ? Math.max(0, Math.min(3, Math.round(e.q)))
     : !Number.isFinite(o) ? 1 : o <= 1 ? 0 : o === 2 ? 1 : o === 3 ? 2 : 3;
   const [la, lo] = String(e.qth || '').split(',').map(s => parseFloat(s));
-  return [khz, Math.round(t / 60000), q, Number.isFinite(la) ? la : null, Number.isFinite(lo) ? lo : null];
+  // starší zápisy nesou jen popisek sestavy (Tecsun PL-330 + prut) - přijímač se pozná z něj
+  const label = String(e.rx || '');
+  const rx = e.rxKey || (/airspy/i.test(label) ? 'airspy' : /ats/i.test(label) ? 'ats4732' : /pl-?330|tecsun/i.test(label) ? 'pl330' : null);
+  return [khz, Math.round(t / 60000), q, Number.isFinite(la) ? la : null, Number.isFinite(lo) ? lo : null, 'l', rx];
 }
 // Posun skóre z paměti: amp·(slyšeno − n·baseline)/(n + k), viz scoring.js → memory.
-function memoryAdjust(freq, nowDt, myLat, myLon) {
+function memoryAdjust(freq, nowDt, myLat, myLon, rx) {
   if (!HEARD_ON) return 0;
   const obs = HEARD_MEM.get(freq);
   if (!obs) return 0;
@@ -1159,6 +1172,7 @@ function memoryAdjust(freq, nowDt, myLat, myLon) {
   let n = 0, h = 0;
   for (const o of obs) {
     if (Math.abs(nowEp - o.t) > m.maxAgeDays * 1440) continue;       // jiná sezóna
+    if (o.rx && rx && o.rx !== rx) continue;                         // jiný přijímač
     if (o.lat != null && o.lon != null &&                            // jiné QTH (chata, dovolená)
         (Math.abs(o.lat - myLat) > m.sameQthDeg || Math.abs(o.lon - myLon) > m.sameQthDeg * 1.5)) continue;
     let d = Math.abs(((o.t % 1440) + 1440) % 1440 - nowMin);
@@ -1169,6 +1183,60 @@ function memoryAdjust(freq, nowDt, myLat, myLon) {
     if (o.q > 0) h += w;
   }
   return n ? Math.round(m.amp * (h - n * m.baseline) / (n + m.k)) : 0;
+}
+
+// Textový snímek pásma (ruční průchod, např. ETM na Tecsunu) → bloky { t: epochMin, items }.
+// Blok začíná řádkem s časem; pod ním buď dvojice „kHz,kvalita", nebo skupiny: řádek
+// se samotnou kvalitou 0–3 a pod ním kmitočty. Stejný formát radar i exportuje.
+//   2026-11-18,20:21,UTC        nebo      21:21 pražského času
+//   6160,0                                0
+//   7265,3                                6160
+//                                         3
+//                                         7265
+// Řádek „# rx=pl330" říká, kterým přijímačem následující bloky vznikly (klíč z nabídky
+// přijímačů); bez něj platí přijímač zvolený při importu. Čas bez „UTC" je místní čas zařízení. Chybí-li datum, vezme se den uložení souboru
+// (fileTimeMs); vyjde-li tak čas z budoucnosti, je to předchozí den.
+function parseSnapshotText(text, fileTimeMs) {
+  const blocks = [];
+  let cur = null, group = null, rx = null;
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim();
+    let m;
+    if ((m = line.match(/^#\s*rx\s*[=:]\s*([a-z0-9_-]+)/i))) { rx = m[1].toLowerCase(); continue; }
+    if (!line || line.startsWith('#')) continue;
+    if ((m = line.match(/^(\d{3,5})\s*[,;\t ]\s*([0-3])$/))) { if (cur) cur.items.set(+m[1], +m[2]); continue; }
+    if ((m = line.match(/^([0-3])$/))) { group = +m[1]; continue; }
+    if ((m = line.match(/^(\d{3,5})$/))) { if (cur && group != null) cur.items.set(+m[1], group); continue; }
+    if ((m = line.match(/(?:(\d{4})-(\d{1,2})-(\d{1,2})[ ,T;]+)?(\d{1,2}):(\d{2})/))) {
+      const utc = /utc|\dz\b/i.test(line), hh = +m[4], mm = +m[5];
+      let t;
+      if (m[1]) t = utc ? Date.UTC(+m[1], +m[2] - 1, +m[3], hh, mm) : new Date(+m[1], +m[2] - 1, +m[3], hh, mm).getTime();
+      else {
+        const base = new Date(Number.isFinite(fileTimeMs) ? fileTimeMs : Date.now());
+        t = utc ? Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hh, mm)
+          : new Date(base.getFullYear(), base.getMonth(), base.getDate(), hh, mm).getTime();
+        if (t > base.getTime() + 10 * 60000) t -= 86400000;
+      }
+      cur = { t: Math.round(t / 60000), items: new Map(), rx }; group = null; blocks.push(cur);
+    }
+  }
+  return blocks.filter(b => b.items.size);
+}
+// Opačný směr: pozorování [kHz, epochMin, kvalita] → text. Blok = pozorování, mezi kterými
+// není pauza delší než gapMin; čas bloku je první pozorování, vždy v UTC.
+function snapshotText(obs, gapMin = 45) {
+  const rigs = [...new Set(obs.map(o => o[6] || ''))].sort();
+  if (rigs.length > 1 || rigs[0]) // oddíl pro každý přijímač, uvozený řádkem rx=
+    return rigs.map(r => (r ? `# rx=${r}\n` : '') + snapshotText(obs.filter(o => (o[6] || '') === r).map(o => o.slice(0, 3)), gapMin)).join('\n');
+  const sorted = [...obs].sort((a, b) => a[1] - b[1]);
+  const blocks = [];
+  for (const o of sorted) {
+    const last = blocks[blocks.length - 1];
+    if (last && o[1] - last.end <= gapMin) { last.items.set(o[0], Math.max(o[2], last.items.get(o[0]) ?? 0)); last.end = o[1]; }
+    else blocks.push({ t: o[1], end: o[1], items: new Map([[o[0], o[2]]]) });
+  }
+  return blocks.map(b => new Date(b.t * 60000).toISOString().slice(0, 16).replace('T', ',') + ',UTC\n' +
+    [...b.items].sort((x, y) => x[1] - y[1] || x[0] - y[0]).map(([f, q]) => `${f},${q}`).join('\n')).join('\n\n') + '\n';
 }
 
 // ── Blacklist (skryté stanice) ──────────────────────────────────────────────
@@ -1255,22 +1323,6 @@ function isTimeActive(startStr, endStr, nowMinutes) {
 //    Při online připojení stáhne SFI a Kp; jinak použije klidový odhad (142 / 2).
 const SPACE_WX = { sfi: SCORING.spaceWeatherDefault.sfi, kp: SCORING.spaceWeatherDefault.kp, live: false };
 
-function mufEstimate(sfi, daylight = 0, decl = 0) {
-  // Empirická heuristika: noční MUF ~ const + sfiMul*SFI, denní +dayBoost MHz (vrstva F2).
-  // daylight 0..1 = osvětlení prostředku trasy (pathDaylight) – denní MUF náběhne plynule
-  // přes soumrak, ne skokem. decl = deklinace Slunce: letní noční F2 vrstva nestihne
-  // zrekombinovat (krátká noc), zimní ano → noční MUF ±seasonNight MHz; ve dne člen mizí.
-  const m = SCORING.muf;
-  return Math.round(m.const + m.sfiMul * sfi + m.dayBoost * daylight
-    + m.seasonNight * (decl / 23.44) * (1 - daylight));
-}
-// Plynulé osvětlení prostředku trasy: 0 = noc (Slunce ≤ smoothFromDeg), 1 = den (≥ smoothToDeg)
-function pathDaylight(lat1, lon1, lat2, lon2, date) {
-  const m = SCORING.muf;
-  const el = solarElevation((lat1 + lat2) / 2, (lon1 + lon2) / 2, date);
-  return Math.min(1, Math.max(0, (el - m.smoothFromDeg) / (m.smoothToDeg - m.smoothFromDeg)));
-}
-
 function geomagLabel(kp) {
   if (kp <= 3) return tr('gm_calm');
   if (kp === 4) return tr('gm_unsettled');
@@ -1297,32 +1349,89 @@ function solarElevation(lat, lon, date) {
   return el;
 }
 
-// Denní absorpce D-vrstvy: osvětlená trasa pod ~10 MHz je silně tlumená.
-// Toto je hlavní důvod, proč dřív svítily nereálné dálkové tropické stanice v poledne.
-function dayAbsorption(freq, myLat, myLon, stLat, stLon, date) {
-  const da = SCORING.dayAbsorption;
-  if (freq >= da.freqCeilKHz) return 0;
-  const midLat = (myLat + stLat) / 2;
-  const midLon = (myLon + stLon) / 2;
-  const sunEl = solarElevation(midLat, midLon, date);      // osvětlení prostředku trasy
-  if (sunEl <= 0) return 0;                                // noční trasa = bez D-absorpce
-  const freqFactor = (da.freqCeilKHz - freq) / da.freqCeilKHz; // 0..1, čím níž, tím hůř
-  return -Math.round(Math.sin(sunEl * Math.PI / 180) * freqFactor * da.maxPenalty);
+// ── Ionosféra po skocích (propagační + skip člen) ────────────────────────────
+// Trasa se rozdělí na skoky přes vrstvu F2 (nejvýš maxHopKm). V bodě odrazu každého
+// skoku se odhadne kritický kmitočet foF2 (Slunce nad tím bodem, sluneční tok, roční
+// doba, Kp) a z geometrie skoku šikmý faktor M; MUF trasy = nejslabší skok. Totéž
+// místo sečte absorpci ve vrstvě D (George & Bradley). Konstanty: scoring.js → iono.
+//   propagační člen = pásmo zavřené i pro nejdelší skok + absorpce + polární útlum
+//   skip člen       = mrtvá zóna (kmitočet by prošel delším skokem, tahle vzdálenost je
+//                     moc krátká) + útlum vzdáleností a počtem skoků
+const R_EARTH = 6371;
+// Bod ve zlomku frac velké kružnice mezi dvěma místy → [šířka, délka]
+function gcPoint(lat1, lon1, lat2, lon2, frac) {
+  const p1 = toRad(lat1), l1 = toRad(lon1), p2 = toRad(lat2), l2 = toRad(lon2);
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((l2 - l1) / 2) ** 2;
+  const d = 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+  if (d < 1e-9) return [lat1, lon1];
+  const a = Math.sin((1 - frac) * d) / Math.sin(d), b = Math.sin(frac * d) / Math.sin(d);
+  const x = a * Math.cos(p1) * Math.cos(l1) + b * Math.cos(p2) * Math.cos(l2);
+  const y = a * Math.cos(p1) * Math.sin(l1) + b * Math.cos(p2) * Math.sin(l2);
+  const z = a * Math.sin(p1) + b * Math.sin(p2);
+  return [Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI, Math.atan2(y, x) * 180 / Math.PI];
 }
-
-function propagationAdjust(freq, bearing, sfi, kp, daylight = 0, decl = 0) {
-  // Frekvenční okno LUF–MUF: co je nad MUF, vyletí do vesmíru (aboveMuf); hraniční nearMuf.
-  const p = SCORING.prop;
-  const muf = mufEstimate(sfi, daylight, decl);
-  let adj = 0;
-  if (freq > muf * 1000 + p.mufMarginKHz) adj += p.aboveMufPenalty;
-  else if (freq > muf * 1000 - p.mufMarginKHz) adj += p.nearMufPenalty;
-  // Polární/Aurorální absorpce při Kp >= auroralKp postihuje trasy severním sektorem
-  if (kp >= p.auroralKp) {
-    const inNorth = bearing >= p.auroralFromDeg || bearing <= p.auroralToDeg;
-    if (inNorth) adj += p.auroralPenalty;
+// Geometrie jednoho skoku: šikmý faktor M (sekans úhlu dopadu na vrstvu) a délka paprsku v km
+function hopGeometry(hopKm) {
+  const io = SCORING.iono, th = hopKm / (2 * R_EARTH), rh = R_EARTH + io.layerKm;
+  const elev = Math.max(Math.atan2(Math.cos(th) - R_EARTH / rh, Math.sin(th)), toRad(io.minElevDeg));
+  const sinI = R_EARTH / rh * Math.cos(elev);
+  const slant = 2 * Math.sqrt(rh * rh + R_EARTH * R_EARTH - 2 * R_EARTH * rh * Math.cos(th));
+  return { m: 1 / Math.sqrt(1 - sinI * sinI), slant: Math.max(slant, 2 * io.layerKm) };
+}
+// Kritický kmitočet foF2 (MHz) nad bodem: den podle výšky Slunce (se zpožděním lagH,
+// vrstva doznívá), noc klesá od večera k minimu před svítáním (místní sluneční čas).
+function foF2Estimate(lat, lon, date, sfi, kp) {
+  const io = SCORING.iono;
+  const s = Math.min(1.5, Math.max(0, (sfi - 60) / 140));
+  const summer = solarDeclination(date) / 23.44 * (lat >= 0 ? 1 : -1); // +1 = léto na té polokouli
+  const day = io.dayBase + io.dayFlux * s;
+  // letní noc vrstva F2 nestihne zaniknout (noční foF2 výrazně výš), zimní klesá méně
+  const nightMin = Math.max(io.nightFloor, io.nightBase + io.nightFlux * s
+    + (summer > 0 ? io.seasonSummer : io.seasonWinter) * summer);
+  const el = solarElevation(lat, lon, new Date(date.getTime() - io.lagH * 3600000));
+  const w = Math.min(1, Math.max(0, (el - io.smoothFromDeg) / (io.smoothToDeg - io.smoothFromDeg)));
+  const lst = (((date.getUTCHours() + date.getUTCMinutes() / 60 + lon / 15) % 24) + 24) % 24;
+  const hn = (lst - 18 + 24) % 24;                       // hodin od 18 h místního slunečního času
+  const decay = hn < io.decayH ? 1 - hn / io.decayH : hn < 18 ? 0 : (hn - 18) / 6;
+  const night = nightMin + io.eveFrac * (day - nightMin) * decay;
+  let f = night + (day - night) * w;
+  const alat = Math.abs(lat);
+  if (alat > 60) f *= io.polarMul;
+  else if (alat < 25) f *= 1 + io.equatorDayBoost * w;
+  if (kp > io.stormKp) f *= Math.max(0.6, 1 - io.stormDrop * (kp - io.stormKp) * (alat > 50 ? 1.5 : 1));
+  return f;
+}
+// Absorpce ve vrstvě D na jeden skok v dB (George & Bradley); zenith = úhel Slunce od zenitu
+function absorptionDb(fMHz, zenith, secI, sfi) {
+  if (zenith >= 102) return 0;
+  const r12 = Math.max(0, (-0.728 + Math.sqrt(0.728 * 0.728 + 4 * 0.00089 * (sfi - 63.7))) / (2 * 0.00089));
+  const c = Math.pow(Math.max(0, Math.cos(toRad(0.881 * zenith))), 1.3);
+  return 677.2 * secI * (1 + 0.0037 * r12) * c / (Math.pow(fMHz + 1.2, 1.98) + 10.2);
+}
+// Oba členy pro jednu trasu (před váhami posuvníků) + MUF trasy pro zobrazení
+function ionoPath(freq, lat1, lon1, lat2, lon2, dist, date, sfi, kp) {
+  const io = SCORING.iono, fMHz = freq / 1000;
+  const d = Math.max(dist, 50), hops = Math.max(1, Math.ceil(d / io.maxHopKm));
+  const g = hopGeometry(d / hops), mMax = hopGeometry(io.maxHopKm).m;
+  const secD = Math.min(g.m * 0.9, 3.5);
+  let fMin = 99, absDb = 0, aurora = 0;
+  for (let k = 0; k < hops; k++) {
+    const [la, lo] = gcPoint(lat1, lon1, lat2, lon2, (k + 0.5) / hops);
+    fMin = Math.min(fMin, foF2Estimate(la, lo, date, sfi, kp));
+    absDb += absorptionDb(fMHz, 90 - solarElevation(la, lo, date), secD, sfi);
+    if (Math.abs(la) > io.auroraLat && kp > io.auroraKp) aurora += io.auroraPerKp * (kp - io.auroraKp);
   }
-  return adj;
+  const muf = fMin * g.m, mufBand = fMin * mMax;
+  const open = x => 1 / (1 + Math.exp(-(x - fMHz) / (io.mufSigma * x)));   // šance, že kmitočet projde
+  const pPath = open(muf), pBand = open(mufBand);
+  const lossDb = 20 * Math.log10(g.slant * hops / io.refKm) + io.hopLossDb * (hops - 1);
+  const prop = -io.mufPenalty * (1 - pBand) - Math.min(io.absCap, io.absMul * absDb) - Math.min(io.auroraCap, aurora);
+  const skip = -io.mufPenalty * (pBand - pPath) + Math.max(-io.lossCap, Math.min(io.nearBonusCap, -io.lossMul * lossDb));
+  return { prop: Math.round(prop), skip: Math.round(skip), muf, hops, absDb };
+}
+// „MUF teď" pro telemetrii: skok 3000 km s odrazem nad daným místem
+function mufEstimate(lat, lon, date, sfi, kp) {
+  return Math.round(foF2Estimate(lat, lon, date, sfi, kp) * hopGeometry(3000).m);
 }
 
 async function fetchSpaceWeather() {
@@ -1374,7 +1483,7 @@ function updateTelemetryBar() {
   // „MUF teď" pro místní trasy: osvětlení nad vlastním QTH (bez polohy střed ČR)
   let [la, lo] = document.getElementById('qthCoords').value.split(',').map(s => parseFloat(s));
   if (!Number.isFinite(la) || !Number.isFinite(lo)) [la, lo] = [49.80, 15.47];
-  const muf = mufEstimate(SPACE_WX.sfi, pathDaylight(la, lo, la, lo, now), solarDeclination(now));
+  const muf = mufEstimate(la, lo, now, SPACE_WX.sfi, SPACE_WX.kp);
   document.getElementById('twMuf').textContent = `~${muf} MHz`;
   document.getElementById('twCond').textContent = geomagLabel(SPACE_WX.kp) + (SPACE_WX.live ? tr('cond_live') : tr('cond_offline'));
 }
@@ -1475,23 +1584,6 @@ function bandKey(freq) {
   return "19";
 }
 
-// Výpočet šance jedné stanice proti zadanému stavu éteru (activeNow).
-// Hlavní výpis jí předává právě vysílající stanice; časová okna budoucí stav:
-// □ po startu stanice, 🔓 po vypnutí rušitele - ŠANCE tedy říká,
-// co bude slouchat po dané události.
-// Skip-zóna (přeskok): jedním skokem signál na vyšších pásmech dopadne daleko,
-// takže blízká stanice na vysoké frekvenci ti PŘELETÍ nad hlavou (mrtvá zóna).
-// Práh mrtvé zóny roste s frekvencí; nad ním navíc multi-hop útlum (na prut/portativ
-// se dálkové skoky těžko chytají). Vrací ZÁPORNÉ body (0 = bez penalizace).
-function skipTerm(freq, dist) {
-  const sk = SCORING.skip;
-  const fMHz = freq / 1000;
-  const floor = Math.min(Math.max((fMHz - sk.pivotMHz) * sk.slopeKmPerMHz, 0), sk.floorCapKm);
-  let s = 0;
-  if (dist < floor) s -= Math.round((floor - dist) / floor * sk.nearPenaltyMax);       // v mrtvé zóně
-  if (dist > sk.farStartKm) s -= Math.round((dist - sk.farStartKm) / sk.farDivKm * sk.farPenaltyMul); // multi-hop útlum
-  return s;
-}
 
 // Citlivost přijímače (plochý posun; Airspy navíc zprovozní pasivní YouLoop)
 const RX_BONUS = SCORING.rxBonus;
@@ -1540,14 +1632,17 @@ function scoreStation(st, env, activeNow) {
 
   // D. Výkon vysílače vycentrovaný na 100 kW (100 kW = 0; neslouží jako konstantní offset)
   const powerBonus = Math.round(Math.log10(Math.max(st.kw, 1) / SCORING.power.centerKw) * SCORING.power.mul);
-  // E. ionosféra (SFI/Kp z NOAA) + denní D-absorpce = propagační člen (jeden slider)
+  // E. Ionosféra po skocích (SFI/Kp z NOAA): propagační člen (zavřené pásmo, absorpce
+  // vrstvy D, polární útlum) a skip člen (mrtvá zóna, útlum vzdáleností) - dva slidery
   const nowDt = env.now || new Date();
-  const daylight = pathDaylight(env.myLat, env.myLon, st.lat, st.lon, nowDt);
-  const propAdj = propagationAdjust(f, bearing, SPACE_WX.sfi, SPACE_WX.kp, daylight, solarDeclination(nowDt));
-  const dayAbsorb = dayAbsorption(f, env.myLat, env.myLon, st.lat, st.lon, nowDt);
+  const iono = ionoPath(f, env.myLat, env.myLon, st.lat, st.lon, dist, nowDt, SPACE_WX.sfi, SPACE_WX.kp);
+  // Slabší přijímač neztrácí všude stejně: silnou stanici slyší každý, hraniční signál
+  // (blízko MUF, přes víc skoků, při absorpci) jen ten citlivější. Proto se ztráty obou
+  // členů násobí podle přijímače (scoring.js → rxMargin; Airspy = 1 = měřítko modelu).
+  const propAdj = iono.prop;
 
-  // D2. Skip-zóna + multi-hop útlum (nahrazuje starý lineární distPenalty)
-  const skip = skipTerm(f, dist);
+  const skip = iono.skip;
+
 
   // F. Detekce sousedního a kanálového rušení (ACI / Co-Channel QRM) – jen od rušitelů,
   // kteří na QTH reálně dopadají silněji (louder). activeNow = null → skóre bez QRM.
@@ -1590,13 +1685,13 @@ function scoreStation(st, env, activeNow) {
   // G. Paměť příjmů (co tu na kmitočtu v tuhle denní dobu už hrálo). Jen do výsledného
   // skóre; do „dopadu na QTH" (activeNow = null: dedup, kdo koho ruší) se nepočítá,
   // aby pozorování z jednoho kanálu neměnilo vyhodnocení rušení na sousedních.
-  const memAdj = activeNow ? memoryAdjust(f, nowDt, env.myLat, env.myLon) : 0;
+  const memAdj = activeNow ? memoryAdjust(f, nowDt, env.myLat, env.myLon, env.rx) : 0;
 
   const raw = SCORE_BASE + rxBonus
     + balconyBonus * w.balcony
     + takeOffBonus + beamAdj + antennaBonus
     + powerBonus * w.power
-    + (propAdj + dayAbsorb) * w.prop
+    + propAdj * w.prop
     + skip * w.skip
     + qrmPenalty + memAdj;
   const score = Math.max(SCORING.clamp.min, Math.min(SCORING.clamp.max, Math.round(raw)));
@@ -1604,7 +1699,7 @@ function scoreStation(st, env, activeNow) {
     dist, bearing, angleDiff: Math.round(angleDiff), score, pl330Tip, qrmFlag,
     parts: { balcony: Math.round(balconyBonus * w.balcony), takeoff: takeOffBonus, beam: beamAdj,
       ant: antennaBonus, rx: rxBonus, power: Math.round(powerBonus * w.power),
-      prop: Math.round((propAdj + dayAbsorb) * w.prop), skip: Math.round(skip * w.skip), qrm: qrmPenalty, mem: memAdj }
+      prop: Math.round(propAdj * w.prop), skip: Math.round(skip * w.skip), qrm: qrmPenalty, mem: memAdj }
   };
 }
 
@@ -2018,7 +2113,7 @@ function saveLogEntry(cid) {
     dist: st.dist, bearing: st.bearing, q, note,
     qth: document.getElementById('qthCoords').value,
     alt: document.getElementById('altitude').value,
-    rx: rigLabel()
+    rx: rigLabel(), rxKey: document.getElementById('rxSelect').value
   });
   setLog(log);
   updateLogBadge();
@@ -2229,6 +2324,7 @@ document.getElementById('azimuth').addEventListener('input', e => {
 ['qthCoords', 'altitude', 'rxSelect', 'antSelect'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
     saveQth();          // ruční zadání QTH → uložit lokálně (per zařízení)
+    updateMemStatus();  // kolik pozorování platí pro zvolený přijímač
     evaluateStations();
   });
 });
@@ -2519,6 +2615,8 @@ function loadHeard() {
   try {
     const raw = JSON.parse(localStorage.getItem(HEARD_KEY));
     HEARD_IMPORTED = Array.isArray(raw) ? raw.filter(o => Array.isArray(o) && o.length >= 3) : [];
+    // starší uložená data bez zdroje a přijímače: tehdy šel importovat jen NightDX (Airspy)
+    for (const o of HEARD_IMPORTED) { if (o.length < 6) o[5] = 'n'; if (o.length < 7) o[6] = o[5] === 'n' ? 'airspy' : null; }
     const on = localStorage.getItem(HEARD_ON_KEY);
     HEARD_ON = on == null ? true : on === '1';
   } catch (e) { HEARD_IMPORTED = []; HEARD_ON = true; }
@@ -2545,8 +2643,10 @@ function updateMemStatus() {
   const ts = all.map(o => o[1]), day = t => new Date(t * 60000).toISOString().slice(0, 10);
   let lo = ts[0], hi = ts[0];
   for (const t of ts) { if (t < lo) lo = t; if (t > hi) hi = t; }
+  const rxSel = document.getElementById('rxSelect').value;
   info.textContent = tr('mem_info', { n: all.length, h: heard, f: new Set(all.map(o => o[0])).size,
-    from: day(lo), to: day(hi), log: all.length - HEARD_IMPORTED.length });
+    from: day(lo), to: day(hi), log: all.length - HEARD_IMPORTED.length,
+    mine: all.filter(o => !o[6] || o[6] === rxSel).length });
 }
 // Minimální čtečka ZIPu (centrální adresář + deflate přes DecompressionStream) - bez knihoven.
 async function unzipJsonFiles(buf) {
@@ -2585,18 +2685,35 @@ function expandNightdxDoc(j) {
   return j.rows.map(r => ({ rx_lat: rx.lat, rx_lon: rx.lon, ...r }));
 }
 async function importHeardFiles(files) {
-  const docs = [];
+  const docs = [], snapshots = [];
   for (const file of files) {
     const buf = await file.arrayBuffer();
     if (new DataView(buf).byteLength > 4 && new DataView(buf).getUint32(0, true) === 0x04034b50) {
       docs.push(...await unzipJsonFiles(buf));
     } else {
-      const j = JSON.parse(new TextDecoder().decode(buf));
-      docs.push(...(Array.isArray(j) ? j : expandNightdxDoc(j)));
+      const text = new TextDecoder().decode(buf);
+      let j = null;
+      try { j = JSON.parse(text); } catch (e) { /* není JSON → textový snímek pásma */ }
+      if (j != null) docs.push(...(Array.isArray(j) ? j : expandNightdxDoc(j)));
+      else {
+        const blocks = parseSnapshotText(text, file.lastModified);
+        if (!blocks.length) throw new Error(file.name + ': ' + tr('mem_bad_format'));
+        snapshots.push(...blocks);
+      }
     }
   }
   const seen = new Set(HEARD_IMPORTED.map(o => o[0] + '|' + o[1]));
   let added = 0, skipped = 0, heard = 0, logAdded = 0;
+  // Textové snímky pásma: jen to, co je zapsané (včetně zapsaných nul). Doplňování
+  // „neslyšeno" za vše ostatní z rozvrhu se zkoušelo a předpověď dalšího snímku nezlepšilo.
+  const [qLat, qLon] = document.getElementById('qthCoords').value.split(',').map(s => parseFloat(s));
+  const qth = [Number.isFinite(qLat) ? Math.round(qLat * 100) / 100 : null, Number.isFinite(qLon) ? Math.round(qLon * 100) / 100 : null];
+  const rxNow = document.getElementById('rxSelect').value; // snímek bez řádku rx= patří zvolenému přijímači
+  for (const b of snapshots) for (const [f, q] of b.items) {
+    if (seen.has(f + '|' + b.t)) continue;
+    seen.add(f + '|' + b.t); HEARD_IMPORTED.push([f, b.t, q, qth[0], qth[1], 's', b.rx || rxNow]);
+    added++; if (q > 0) heard++;
+  }
   // Vlastní záloha (📤 Export): vrátí zápisy deníku i dříve importovaná pozorování
   const backups = docs.filter(d => d && d.app === 'dx-radar');
   if (backups.length) {
@@ -2610,7 +2727,8 @@ async function importHeardFiles(files) {
         const t = Date.parse(h && h.utc), khz = Math.round(Number(h && h.khz));
         if (!Number.isFinite(t) || !(khz > 0)) { skipped++; continue; }
         const o = [khz, Math.round(t / 60000), Math.max(0, Math.min(3, Math.round(Number(h.q) || 0))),
-          Number.isFinite(h.lat) ? h.lat : null, Number.isFinite(h.lon) ? h.lon : null];
+          Number.isFinite(h.lat) ? h.lat : null, Number.isFinite(h.lon) ? h.lon : null, h.src || 'n',
+          h.rx || ((h.src || 'n') === 'n' ? 'airspy' : null)];
         if (seen.has(o[0] + '|' + o[1])) continue;
         seen.add(o[0] + '|' + o[1]); HEARD_IMPORTED.push(o); added++; if (o[2] > 0) heard++;
       }
@@ -2638,9 +2756,10 @@ function exportAllData() {
   const data = {
     app: 'dx-radar', v: 1, exported: new Date().toISOString(),
     note: 'log = SWL log entries (q: 0 nothing, 1 weak, 2 readable, 3 good; old entries carry sinpo). ' +
-      'heard = imported observations (q as above, lat/lon = receiving site).',
+      'heard = imported observations (q as above, lat/lon = receiving site; src: n = NightDX, ' +
+      's = manual band snapshot; rx = receiver key, memory only learns from the same receiver).',
     log: getLog(),
-    heard: HEARD_IMPORTED.map(([khz, t, q, lat, lon]) => ({ khz, utc: new Date(t * 60000).toISOString(), q, lat, lon }))
+    heard: HEARD_IMPORTED.map(([khz, t, q, lat, lon, src, rx]) => ({ khz, utc: new Date(t * 60000).toISOString(), q, lat, lon, src: src || 'n', rx: rx || null }))
   };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
@@ -2650,6 +2769,21 @@ function exportAllData() {
   flashToast(tr('mem_exported', { log: data.log.length, n: data.heard.length }));
 }
 document.getElementById('btnMemExport').addEventListener('click', exportAllData);
+// Export ručních pozorování jako textové snímky pásma (deník + importované snímky,
+// bez NightDX). Jde zase naimportovat
+// a je to i vstup pro tools/calib.mjs.
+function exportSnapshots() {
+  const obs = heardFromLog().concat(HEARD_IMPORTED.filter(o => o[5] === 's'));
+  if (!obs.length) { flashToast(tr('mem_snap_empty')); return; }
+  const text = snapshotText(obs);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = `dx-radar-snapshots-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  flashToast(tr('mem_snap_exported', { n: obs.length, b: (text.match(/,UTC$/gm) || []).length }));
+}
+document.getElementById('btnMemExportTxt').addEventListener('click', exportSnapshots);
 document.getElementById('btnMemImport').addEventListener('click', () => document.getElementById('memFile').click());
 document.getElementById('memFile').addEventListener('change', async e => {
   const files = [...e.target.files];

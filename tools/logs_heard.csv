@@ -15,8 +15,9 @@ utc,rx,khz,site,sinpo
 2026-08-08T18:36Z,skorkov,9620,bangalore,5
 2026-08-08T18:35Z,skorkov,9500,galbeni,5
 2026-08-08T18:34Z,skorkov,9460,emirler,5
-2026-08-08T18:23Z,skorkov,6070,toronto,5
-2026-08-08T11:13Z,skorkov,6070,toronto,5
+# vyřazeno: 6070 kHz vedené jako Toronto je nejspíš Channel 292 (Rohrbach), nejde zpětně ověřit
+# 2026-08-08T18:23Z,skorkov,6070,toronto,5
+# 2026-08-08T11:13Z,skorkov,6070,toronto,5
 2026-08-07T20:46Z,praha,9740,galbeni,5
 2026-08-04T15:29Z,praha,15520,noblejas,5
 2026-08-02T19:20Z,praha,11885,sontay,5
