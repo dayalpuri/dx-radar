@@ -59,7 +59,8 @@ derived from the date; sources from different seasons are never mixed.
 
 ## SWL log & web station verification
 
-- **📝 Log** on each card: record SINPO (5 digits) + notes into the log (localStorage).
+- **📝 Log** on each card: one tap for reception quality (0 nothing · 1 weak · 2 readable · 3 good) + a note, saved to the log (localStorage).
+- **🧠 Reception memory**: import a NightDX export (`.zip` or sidecar `.json` files); together with your own log it shifts the score by what was or was not heard on the same frequency at the same time of day (±3 h) from the same QTH. Stays in the browser. Check it with `node tools/memory_eval.mjs <unzipped export>`.
 - **📖 Log** in the top bar: the full log, deleting entries, **📋 Export MD**
   (Markdown lines for Obsidian).
 - **🎧 Stream** on each card: verify the ID of a received station via its web

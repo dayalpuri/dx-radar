@@ -369,6 +369,35 @@
       border-radius: 4px; padding: 7px 8px; font-family: ui-monospace, Menlo, monospace; font-size: 13px;
     }
     #blStatus { font-weight: 400; }
+    #memStatus { font-weight: 400; }
+    #memFile { display: none; }
+    #memInfo { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    /* Globální `label` je flex + verzálky (popisek vlevo, hodnota vpravo). Souvislý text
+       nápovědy by se tím rozpadl na sloupce a přetekl - tady je to obyčejný odstavec. */
+    details.tuning { min-width: 0; }
+    details.tuning > summary { flex-wrap: wrap; }
+    .slider-row label { gap: 8px; align-items: baseline; }
+    .slider-row label > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+    .slider-row input[type="range"] { width: 100%; min-width: 0; }
+    .tuning-body label.bl-toggle {
+      justify-content: flex-start; align-items: center; gap: 8px; cursor: pointer;
+      text-transform: none; font-size: 14px; color: var(--text);
+    }
+    .tuning-body label.bl-hint {
+      display: block; text-transform: none; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere;
+    }
+    .tuning-body label.bl-hint code {
+      font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--text);
+      background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px;
+    }
+    /* Širší obrazovka: oba panely vedle sebe (posuvníky nejsou roztažené přes celou šířku) */
+    @media (min-width: 721px) {
+      .list-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+    }
+    /* Mobil: 16px v textovém poli, jinak iOS Safari při ťuknutí přiblíží celou stránku */
+    @media (max-width: 720px) {
+      #blText { font-size: 16px; }
+    }
 
     .pl330-advice {
       background: var(--inset);
@@ -414,6 +443,12 @@
     }
     .log-form input[type="number"] { width: 46px; padding: 4px; text-align: center; }
     .log-form .sinpo-lbl { color: var(--muted); font-size: 11px; }
+    /* Kvalita příjmu 0–3: jedno ťuknutí místo pěti číslic SINPO */
+    .q-pick { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
+    .q-btn { flex: 1 1 110px; cursor: pointer; padding: 8px 6px; font-weight: 600; color: var(--muted); background: var(--bg); }
+    .q-btn.active { border-color: var(--accent); color: var(--amber); background: var(--raised); }
+    .q-help { flex: 1 1 100%; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+    .log-entry .q-str { color: var(--amber); font-weight: bold; }
 
     /* Panel webových streamů pro ověření ID stanice */
     .stream-box {
@@ -684,13 +719,31 @@
   <details class="tuning" id="blacklistBox">
     <summary><span data-i18n="bl_summary">🚫 Blacklist stanic</span> <span id="blStatus" class="wval"></span></summary>
     <div class="tuning-body">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <label class="bl-toggle">
         <input type="checkbox" id="blOn" checked> <span data-i18n="bl_on">Blacklist zapnutý</span>
       </label>
-      <label style="margin-top:6px;" data-i18n-html="bl_hint">Vzory — jeden na řádek, slovo v <strong>názvu</strong> stanice (např. čínské: <code>china radio</code>, <code>cri</code>, <code>cnr</code>, <code>pbs</code>). Celou <strong>zemi</strong> skryješ kódem VELKÝMI — Čína: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Rusko: <code>RUS</code>:</label>
+      <label class="bl-hint" for="blText" data-i18n-html="bl_hint">Vzory — jeden na řádek, slovo v <strong>názvu</strong> stanice (např. čínské: <code>china radio</code>, <code>cri</code>, <code>cnr</code>, <code>pbs</code>). Celou <strong>zemi</strong> skryješ kódem VELKÝMI — Čína: <code>CHN</code>, <code>TIB</code>, <code>TKS</code>; Rusko: <code>RUS</code>:</label>
       <textarea id="blText" rows="6" spellcheck="false" placeholder="china radio&#10;pbs&#10;CHN"></textarea>
       <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
         <button type="button" class="action-btn" id="btnBlReset" data-i18n="bl_reset">↺ Výchozí seznam</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Paměť příjmů: co na kmitočtu ve stejnou denní dobu už hrálo / nehrálo (import NightDX + deník) -->
+  <details class="tuning" id="memoryBox">
+    <summary><span data-i18n="mem_summary">🧠 Paměť příjmů</span> <span id="memStatus" class="wval"></span></summary>
+    <div class="tuning-body">
+      <label class="bl-toggle">
+        <input type="checkbox" id="memOn" checked> <span data-i18n="mem_on">Paměť zapnutá</span>
+      </label>
+      <label class="bl-hint" data-i18n-html="mem_hint">Skóre se posune podle toho, co na <strong>stejném kmitočtu</strong> ve stejnou denní dobu (±3 h) z tohoto QTH už hrálo nebo nehrálo. Učí se ze dvou zdrojů: z importu <strong>NightDX</strong> (exportní <code>.zip</code> nebo jednotlivé <code>.json</code>) a z každého zápisu v SWL deníku. Export uloží deník i importovaná data do jednoho souboru, který jde zase naimportovat. Data zůstávají jen v tomto prohlížeči.</label>
+      <div id="memInfo"></div>
+      <input type="file" id="memFile" accept=".zip,.json,application/zip,application/json" multiple>
+      <div class="btn-row" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="action-btn" id="btnMemImport" data-i18n="mem_import">📥 Import (NightDX zip / JSON)</button>
+        <button type="button" class="action-btn" id="btnMemExport" data-i18n="mem_export">📤 Export všeho (JSON)</button>
+        <button type="button" class="action-btn" id="btnMemClear" data-i18n="mem_clear">🗑 Smazat importovaná data</button>
       </div>
     </div>
   </details>
@@ -807,7 +860,7 @@ const I18N = {
     gm_calm: "Klidné", gm_unsettled: "Neklidné", gm_storm: "Bouřka", gm_extreme: "Extrémní bouře",
     cond_live: " (live NOAA)", cond_offline: " (offline odhad)",
     toast_weights: "Váhy zkopírovány (JSON) — pošli je k zapečení výchozích hodnot.",
-    toast_logged: "Zapsáno do deníku: {st} (SINPO {sinpo})",
+    toast_logged: "Zapsáno do deníku: {st} ({q})",
     log_empty: "Deník je prázdný — chytni něco a zapiš přes 📝 Log.",
     log_empty_alert: "Deník je prázdný.", confirm_clear: "Vymazat celý SWL deník?",
     gps_denied: "GPS odmítnuta", gps_nodev: "Přímá GPS není v tomto režimu dostupná",
@@ -881,7 +934,7 @@ const I18N = {
     gm_calm: "Quiet", gm_unsettled: "Unsettled", gm_storm: "Storm", gm_extreme: "Extreme storm",
     cond_live: " (live NOAA)", cond_offline: " (offline estimate)",
     toast_weights: "Weights copied (JSON) — send them to bake defaults.",
-    toast_logged: "Logged: {st} (SINPO {sinpo})",
+    toast_logged: "Logged: {st} ({q})",
     log_empty: "Log is empty — catch something and record it via 📝 Log.",
     log_empty_alert: "Log is empty.", confirm_clear: "Clear the whole SWL log?",
     gps_denied: "GPS denied", gps_nodev: "Direct GPS not available in this mode",
@@ -901,6 +954,21 @@ const I18N = {
     }
 };
 Object.assign(I18N.cs, {
+  mem_summary: "🧠 Paměť příjmů", mem_on: "Paměť zapnutá", mem_on_n: "(zap, {n} záznamů)",
+  mem_hint: "Skóre se posune podle toho, co na <strong>stejném kmitočtu</strong> ve stejnou denní dobu (±3 h) z tohoto QTH už hrálo nebo nehrálo. Učí se ze dvou zdrojů: z importu <strong>NightDX</strong> (exportní <code>.zip</code> nebo jednotlivé <code>.json</code>) a z každého zápisu v SWL deníku. Export uloží deník i importovaná data do jednoho souboru, který jde zase naimportovat. Data zůstávají jen v tomto prohlížeči.",
+  mem_import: "📥 Import (NightDX zip / JSON)", mem_clear: "🗑 Smazat importovaná data",
+  mem_export: "📤 Export všeho (JSON)", mem_exported: "Exportováno: {log} zápisů deníku, {n} importovaných pozorování.",
+  mem_empty: "Zatím žádná pozorování.",
+  mem_info: "{n} pozorování na {f} kmitočtech, slyšeno {h}, období {from} až {to}, z deníku {log}.",
+  mem_imported: "Paměť: přidáno {added} pozorování (slyšeno {heard}) a {log} zápisů deníku, přeskočeno {skipped}.",
+  mem_err: "Import se nepovedl: {e}", mem_confirm_clear: "Smazat všechna importovaná pozorování? Deník zůstane.",
+  p_mem: "paměť",
+  q_ask: "Jak to hrálo?", q_md: "Příjem",
+  q_name0: "nic", q_name1: "slabé", q_name2: "čitelné", q_name3: "dobré",
+  q_help0: "Nic: jen šum, nebo nosná bez programu.",
+  q_help1: "Slabé: stanice tam je, poznám hlas nebo hudbu, ale nerozumím.",
+  q_help2: "Čitelné: rozumím většině, ruší šum, únik nebo sousední stanice.",
+  q_help3: "Dobré: pohodlný poslech, rozumím všemu.",
   bl_on_n: "(zap, {n} vzorů)", bl_off: "(vyp)",
   stream_play_fail: "Stream se nepodařilo přehrát (kodek/blokace). Zkus jiný odkaz nebo web stanice.",
   clip_blocked_file: "Schránka je blokovaná (file://). Zkopíruj ručně:",
@@ -909,6 +977,21 @@ Object.assign(I18N.cs, {
   alt_got: "Výška terénu: {m} m (bez patra — přičti ~3 m/patro)", alt_fail: "Výšku terénu se nepodařilo zjistit."
 });
 Object.assign(I18N.en, {
+  mem_summary: "🧠 Reception memory", mem_on: "Memory on", mem_on_n: "(on, {n} records)",
+  mem_hint: "The score shifts by what was or was not heard on the <strong>same frequency</strong> at the same time of day (±3 h) from this QTH. It learns from two sources: a <strong>NightDX</strong> import (export <code>.zip</code> or single <code>.json</code> files) and every entry in your SWL log. Export saves the log and the imported data into one file that can be imported again. The data stays in this browser only.",
+  mem_import: "📥 Import (NightDX zip / JSON)", mem_clear: "🗑 Delete imported data",
+  mem_export: "📤 Export everything (JSON)", mem_exported: "Exported: {log} log entries, {n} imported observations.",
+  mem_empty: "No observations yet.",
+  mem_info: "{n} observations on {f} frequencies, {h} heard, {from} to {to}, {log} from the log.",
+  mem_imported: "Memory: added {added} observations ({heard} heard) and {log} log entries, skipped {skipped}.",
+  mem_err: "Import failed: {e}", mem_confirm_clear: "Delete all imported observations? The log stays.",
+  p_mem: "memory",
+  q_ask: "How was it?", q_md: "Reception",
+  q_name0: "nothing", q_name1: "weak", q_name2: "readable", q_name3: "good",
+  q_help0: "Nothing: only noise, or a carrier with no programme.",
+  q_help1: "Weak: a station is there, I can tell speech from music, but cannot follow it.",
+  q_help2: "Readable: I follow most of it; noise, fading or a neighbour gets in the way.",
+  q_help3: "Good: comfortable listening, I follow everything.",
   bl_on_n: "(on, {n} patterns)", bl_off: "(off)",
   stream_play_fail: "Could not play stream (codec/blocked). Try another link or the station's site.",
   clip_blocked_file: "Clipboard blocked (file://). Copy manually:",
@@ -1021,11 +1104,71 @@ function antBand(buckets, f) { for (const [lim, val] of buckets) if (f < lim) re
 
 // Krátký rozklad skóre do karty – jen nenulové složky, se znaménkem.
 const PART_KEYS = { balcony: 'p_balcony', beam: 'p_beam', ant: 'p_ant', rx: 'p_rx',
-  power: 'p_power', prop: 'p_prop', skip: 'p_skip', qrm: 'p_qrm', takeoff: 'p_takeoff' };
+  power: 'p_power', prop: 'p_prop', skip: 'p_skip', qrm: 'p_qrm', takeoff: 'p_takeoff', mem: 'p_mem' };
 function fmtParts(p) {
   if (!p) return '';
   return Object.entries(p).filter(([, v]) => v).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .map(([k, v]) => `<span>${tr(PART_KEYS[k] || k)} ${v > 0 ? '+' : ''}${v}</span>`).join('');
+}
+
+// ── Paměť příjmů ────────────────────────────────────────────────────────────
+// Pozorování „na kmitočtu f v čase t bylo/nebylo slyšet" (import NightDX + SWL deník).
+// Tvar: [kHz, epochMin, kvalita 0–3 (0 = neslyšeno), šířka QTH, délka QTH] (QTH může být null).
+// Konstanty viz scoring.js → memory. Čisté funkce - volá je i tools/memory_eval.mjs.
+let HEARD_MEM = new Map(); // kHz → [{ t, q, lat, lon }]
+let HEARD_ON = true;
+function setHeardObs(obs) {
+  HEARD_MEM = new Map();
+  for (const [f, t, q, lat, lon] of obs) {
+    if (!HEARD_MEM.has(f)) HEARD_MEM.set(f, []);
+    HEARD_MEM.get(f).push({ t, q, lat, lon });
+  }
+}
+// Jedna nahrávka NightDX (sidecar JSON / řádek logbooku) → pozorování, nebo null.
+// Slyšeno = klasifikátor AST neřekl „noise" a modulace je aspoň heardMinDb nad šumem.
+// Starý DSP klasifikátor je nespolehlivý (hlasitý šum = „hlas"), ten se přeskakuje.
+function obsFromNightdx(d) {
+  if (!d || typeof d !== 'object') return null;
+  const t = Date.parse(d.utc_start), khz = Math.round(Number(d.khz));
+  if (!Number.isFinite(t) || !(khz >= 1800) || d.error) return null;
+  if (!String(d.class_backend || '').startsWith('ast')) return null;
+  const mod = Number(d.modulation_db), label = d.label || d.classification;
+  const heard = label && label !== 'noise' && mod >= SCORING.memory.heardMinDb;
+  const q = !heard ? 0 : mod < 10 ? 1 : mod < 20 ? 2 : 3;
+  const ll = v => Number.isFinite(Number(v)) && v != null ? Math.round(Number(v) * 100) / 100 : null;
+  return [khz, Math.round(t / 60000), q, ll(d.rx_lat), ll(d.rx_lon)];
+}
+// Zápis z SWL deníku → pozorování. Nové zápisy mají kvalitu q 0–3 přímo; staré SINPO
+// se převede z celkového dojmu O (1 = nepoužitelné → neslyšeno).
+function obsFromLog(e) {
+  const t = Date.parse(e && e.ts), khz = Math.round(Number(e && e.freq));
+  if (!Number.isFinite(t) || !(khz > 0)) return null;
+  const o = parseInt(String(e.sinpo || '')[4], 10);
+  const q = Number.isFinite(e.q) ? Math.max(0, Math.min(3, Math.round(e.q)))
+    : !Number.isFinite(o) ? 1 : o <= 1 ? 0 : o === 2 ? 1 : o === 3 ? 2 : 3;
+  const [la, lo] = String(e.qth || '').split(',').map(s => parseFloat(s));
+  return [khz, Math.round(t / 60000), q, Number.isFinite(la) ? la : null, Number.isFinite(lo) ? lo : null];
+}
+// Posun skóre z paměti: amp·(slyšeno − n·baseline)/(n + k), viz scoring.js → memory.
+function memoryAdjust(freq, nowDt, myLat, myLon) {
+  if (!HEARD_ON) return 0;
+  const obs = HEARD_MEM.get(freq);
+  if (!obs) return 0;
+  const m = SCORING.memory, win = m.windowH * 60;
+  const nowEp = nowDt.getTime() / 60000, nowMin = nowDt.getUTCHours() * 60 + nowDt.getUTCMinutes();
+  let n = 0, h = 0;
+  for (const o of obs) {
+    if (Math.abs(nowEp - o.t) > m.maxAgeDays * 1440) continue;       // jiná sezóna
+    if (o.lat != null && o.lon != null &&                            // jiné QTH (chata, dovolená)
+        (Math.abs(o.lat - myLat) > m.sameQthDeg || Math.abs(o.lon - myLon) > m.sameQthDeg * 1.5)) continue;
+    let d = Math.abs(((o.t % 1440) + 1440) % 1440 - nowMin);
+    if (d > 720) d = 1440 - d;
+    if (d > win) continue;
+    const w = 1 - 0.5 * d / win;
+    n += w;
+    if (o.q > 0) h += w;
+  }
+  return n ? Math.round(m.amp * (h - n * m.baseline) / (n + m.k)) : 0;
 }
 
 // ── Blacklist (skryté stanice) ──────────────────────────────────────────────
@@ -1444,19 +1587,24 @@ function scoreStation(st, env, activeNow) {
   // YouLoop má směrový null – potlačí QRM na polovinu
   if (isLoop && SCORING.qrm.loopHalves) qrmPenalty = Math.round(qrmPenalty / 2);
 
+  // G. Paměť příjmů (co tu na kmitočtu v tuhle denní dobu už hrálo). Jen do výsledného
+  // skóre; do „dopadu na QTH" (activeNow = null: dedup, kdo koho ruší) se nepočítá,
+  // aby pozorování z jednoho kanálu neměnilo vyhodnocení rušení na sousedních.
+  const memAdj = activeNow ? memoryAdjust(f, nowDt, env.myLat, env.myLon) : 0;
+
   const raw = SCORE_BASE + rxBonus
     + balconyBonus * w.balcony
     + takeOffBonus + beamAdj + antennaBonus
     + powerBonus * w.power
     + (propAdj + dayAbsorb) * w.prop
     + skip * w.skip
-    + qrmPenalty;
+    + qrmPenalty + memAdj;
   const score = Math.max(SCORING.clamp.min, Math.min(SCORING.clamp.max, Math.round(raw)));
   return {
     dist, bearing, angleDiff: Math.round(angleDiff), score, pl330Tip, qrmFlag,
     parts: { balcony: Math.round(balconyBonus * w.balcony), takeoff: takeOffBonus, beam: beamAdj,
       ant: antennaBonus, rx: rxBonus, power: Math.round(powerBonus * w.power),
-      prop: Math.round((propAdj + dayAbsorb) * w.prop), skip: Math.round(skip * w.skip), qrm: qrmPenalty }
+      prop: Math.round((propAdj + dayAbsorb) * w.prop), skip: Math.round(skip * w.skip), qrm: qrmPenalty, mem: memAdj }
   };
 }
 
@@ -1556,12 +1704,11 @@ function evaluateStations() {
         </span>
       </div>
       <div class="log-form" id="logform-${cid}" style="display:none">
-        <span class="sinpo-lbl">SINPO (1–5):</span>
-        <label class="sinpo-lbl">S</label><input type="number" id="sin-s-${cid}" min="1" max="5" value="4">
-        <label class="sinpo-lbl">I</label><input type="number" id="sin-i-${cid}" min="1" max="5" value="4">
-        <label class="sinpo-lbl">N</label><input type="number" id="sin-n-${cid}" min="1" max="5" value="3">
-        <label class="sinpo-lbl">P</label><input type="number" id="sin-p-${cid}" min="1" max="5" value="3">
-        <label class="sinpo-lbl">O</label><input type="number" id="sin-o-${cid}" min="1" max="5" value="3">
+        <span class="sinpo-lbl">${tr('q_ask')}</span>
+        <div class="q-pick" id="qpick-${cid}" data-q="2">
+          ${[0, 1, 2, 3].map(q => `<button type="button" class="q-btn${q === 2 ? ' active' : ''}" data-q="${q}" onclick="pickQuality('${cid}', ${q})">${q} · ${tr('q_name' + q)}</button>`).join('')}
+        </div>
+        <div class="q-help" id="qhelp-${cid}">${tr('q_help2')}</div>
         <input type="text" id="lognote-${cid}" placeholder="${tr('note_ph')}" style="flex:1; min-width:120px;">
         <button class="log-btn" onclick="saveLogEntry('${cid}')">${tr('log_save')}</button>
       </div>
@@ -1812,7 +1959,7 @@ function copyMarkdownLog(cid) {
   const alt = document.getElementById('altitude').value;
   const rx = rigLabel();
 
-  const md = `- **${r.freq} kHz** | **${r.station}** (${r.site}) | ${dateStr} ${utcStr} | ${r.dist} km (${r.bearing}°) | QTH: ${alt}m | RX: ${rx} | SINPO: `;
+  const md = `- **${r.freq} kHz** | **${r.station}** (${r.site}) | ${dateStr} ${utcStr} | ${r.dist} km (${r.bearing}°) | QTH: ${alt}m | RX: ${rx} | ${tr('q_md')}: `;
   navigator.clipboard.writeText(md).then(() => {
     const t = document.getElementById('toast');
     t.style.display = 'block';
@@ -1823,7 +1970,7 @@ function copyMarkdownLog(cid) {
   });
 }
 
-// 8b. SWL DENÍK (SINPO logování do localStorage)
+// 8b. SWL DENÍK (kvalita příjmu 0–3 do localStorage; staré zápisy mají SINPO)
 const LOG_KEY = 'dxr_log_v1';
 
 function getLog() {
@@ -1833,12 +1980,24 @@ function getLog() {
 function setLog(log) {
   try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); }
   catch (err) { alert('Log storage full: ' + err.message); }
+  rebuildHeardMem(); // zápis v deníku je zároveň pozorování pro paměť příjmů
 }
 function updateLogBadge() {
   document.getElementById('logCount').textContent = getLog().length;
 }
 function stationByCid(cid) {
   return lastResults.find(r => `${r.freq}-${r.station.replace(/[^a-zA-Z0-9]/g, '')}` === cid);
+}
+// Kvalita příjmu 0–3 (stejná stupnice jako kalibrační snímky a paměť příjmů):
+// 0 nic · 1 slabé (stanice tam je, nerozumím) · 2 čitelné · 3 dobré. Staré zápisy mají SINPO.
+function qualityLabel(e) {
+  return Number.isFinite(e.q) ? `${tr('q_md')} ${e.q} · ${tr('q_name' + e.q)}` : `SINPO: ${e.sinpo || '?'}`;
+}
+function pickQuality(cid, q) {
+  const box = document.getElementById('qpick-' + cid);
+  box.dataset.q = q;
+  box.querySelectorAll('.q-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.q) === q));
+  document.getElementById('qhelp-' + cid).textContent = tr('q_help' + q);
 }
 function toggleLogForm(cid) {
   const el = document.getElementById('logform-' + cid);
@@ -1847,8 +2006,7 @@ function toggleLogForm(cid) {
 function saveLogEntry(cid) {
   const st = stationByCid(cid);
   if (!st) return;
-  const g = id => document.getElementById(id).value || '3';
-  const sinpo = ['s', 'i', 'n', 'p', 'o'].map(k => g(`sin-${k}-${cid}`)).join('');
+  const q = parseInt(document.getElementById('qpick-' + cid).dataset.q, 10);
   const note = document.getElementById('lognote-' + cid).value.trim();
   const now = new Date();
   const log = getLog();
@@ -1857,7 +2015,7 @@ function saveLogEntry(cid) {
     date: now.toISOString().slice(0, 10),
     utc: `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`,
     freq: st.freq, station: st.station, country: st.country, site: st.site,
-    dist: st.dist, bearing: st.bearing, sinpo, note,
+    dist: st.dist, bearing: st.bearing, q, note,
     qth: document.getElementById('qthCoords').value,
     alt: document.getElementById('altitude').value,
     rx: rigLabel()
@@ -1866,7 +2024,7 @@ function saveLogEntry(cid) {
   updateLogBadge();
   toggleLogForm(cid);
   const t = document.getElementById('toast');
-  t.textContent = tr('toast_logged', { st: st.station, sinpo });
+  t.textContent = tr('toast_logged', { st: st.station, q: qualityLabel({ q }) });
   t.style.display = 'block';
   setTimeout(() => { t.style.display = 'none'; t.textContent = tr('toast_copied'); }, 2500);
 }
@@ -1884,7 +2042,7 @@ function renderLogEntries() {
     return `<div class="log-entry">
       <span><strong>${e.freq} kHz</strong> | ${escapeHtml(e.station)} (${escapeHtml(e.country)}) | ${escapeHtml(e.date)} ${escapeHtml(e.utc)} UTC
         | ${Number(e.dist).toLocaleString(LANG === 'cs' ? 'cs-CZ' : 'en-US')} km (${e.bearing}°) | QTH ${escapeHtml(e.alt)} m | RX: ${escapeHtml(e.rx)}
-        | SINPO: <span class="sinpo-str">${escapeHtml(e.sinpo)}</span>${e.note ? ' | 📝 ' + escapeHtml(e.note) : ''}</span>
+        | <span class="q-str">${escapeHtml(qualityLabel(e))}</span>${e.note ? ' | 📝 ' + escapeHtml(e.note) : ''}</span>
       <button class="del-btn" onclick="deleteLogEntry(${realIdx})">✖</button>
     </div>`;
   }).join('');
@@ -1902,7 +2060,7 @@ function exportLogMd() {
   const md = log.map(e =>
     `- **${e.freq} kHz** | **${e.station}** (${e.site}) | ${e.date} ${e.utc} UTC | ` +
     `${Number(e.dist).toLocaleString(LANG === 'cs' ? 'cs-CZ' : 'en-US')} km (${e.bearing}°) | QTH: ${e.alt}m | RX: ${e.rx} | ` +
-    `SINPO: ${e.sinpo}${e.note ? ' | ' + e.note : ''}`).join('\n');
+    `${qualityLabel(e)}${e.note ? ' | ' + e.note : ''}`).join('\n');
   navigator.clipboard.writeText(md).then(() => {
     const t = document.getElementById('toast');
     t.style.display = 'block';
@@ -2304,6 +2462,8 @@ function initTuningUI() {
   document.getElementById('blText').value = BLACKLIST.join('\n');
   document.getElementById('blOn').checked = BLACKLIST_ON;
   updateBlStatus();
+  document.getElementById('memOn').checked = HEARD_ON;
+  updateMemStatus();
 }
 function updateBlStatus() {
   const el = document.getElementById('blStatus');
@@ -2350,6 +2510,166 @@ document.getElementById('btnBlReset').addEventListener('click', () => {
   saveBlacklist(); updateBlStatus(); evaluateStations();
 });
 
+// 9b2. PAMĚŤ PŘÍJMŮ — import NightDX (zip / JSON), přepínač, lokální persistence
+const HEARD_KEY = 'dxr_heard_v1';
+const HEARD_ON_KEY = 'dxr_heard_on_v1';
+const HEARD_MAX = 30000;
+let HEARD_IMPORTED = []; // jen importovaná pozorování; deník se přidává při sestavení
+function loadHeard() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HEARD_KEY));
+    HEARD_IMPORTED = Array.isArray(raw) ? raw.filter(o => Array.isArray(o) && o.length >= 3) : [];
+    const on = localStorage.getItem(HEARD_ON_KEY);
+    HEARD_ON = on == null ? true : on === '1';
+  } catch (e) { HEARD_IMPORTED = []; HEARD_ON = true; }
+  rebuildHeardMem();
+}
+function saveHeard() {
+  try {
+    localStorage.setItem(HEARD_KEY, JSON.stringify(HEARD_IMPORTED));
+    localStorage.setItem(HEARD_ON_KEY, HEARD_ON ? '1' : '0');
+  } catch (e) { alert('Storage full: ' + e.message); }
+}
+function heardFromLog() { return getLog().map(obsFromLog).filter(Boolean); }
+function rebuildHeardMem() {
+  setHeardObs(HEARD_IMPORTED.concat(heardFromLog()));
+  updateMemStatus();
+}
+function updateMemStatus() {
+  const st = document.getElementById('memStatus'), info = document.getElementById('memInfo');
+  if (!st || !info) return;
+  const all = HEARD_IMPORTED.concat(heardFromLog());
+  const heard = all.filter(o => o[2] > 0).length;
+  st.textContent = HEARD_ON ? tr('mem_on_n', { n: all.length }) : tr('bl_off');
+  if (!all.length) { info.textContent = tr('mem_empty'); return; }
+  const ts = all.map(o => o[1]), day = t => new Date(t * 60000).toISOString().slice(0, 10);
+  let lo = ts[0], hi = ts[0];
+  for (const t of ts) { if (t < lo) lo = t; if (t > hi) hi = t; }
+  info.textContent = tr('mem_info', { n: all.length, h: heard, f: new Set(all.map(o => o[0])).size,
+    from: day(lo), to: day(hi), log: all.length - HEARD_IMPORTED.length });
+}
+// Minimální čtečka ZIPu (centrální adresář + deflate přes DecompressionStream) - bez knihoven.
+async function unzipJsonFiles(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder();
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--)
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('not a zip');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const out = [];
+  for (let i = 0; i < count && dv.getUint32(p, true) === 0x02014b50; i++) {
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), cmtLen = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + extraLen + cmtLen;
+    if (!/\.json$/i.test(name) || /(^|\/)mission\.json$/i.test(name)) continue;
+    const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+    const data = u8.subarray(start, start + csize);
+    let text;
+    if (method === 0) text = dec.decode(data);
+    else if (method === 8) {
+      const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      text = await new Response(stream).text();
+    } else continue;
+    try { out.push(JSON.parse(text)); } catch (e) { /* poškozený soubor přeskoč */ }
+  }
+  return out;
+}
+// Konsolidovaný export z NightDX (skill nightdx-export): { app: 'nightdx', rx: {lat, lon},
+// rows: [...] } - řádky mají stejná pole jako sidecar, místo příjmu je společné v rx.
+function expandNightdxDoc(j) {
+  if (!j || j.app !== 'nightdx' || !Array.isArray(j.rows)) return [j];
+  const rx = j.rx || {};
+  return j.rows.map(r => ({ rx_lat: rx.lat, rx_lon: rx.lon, ...r }));
+}
+async function importHeardFiles(files) {
+  const docs = [];
+  for (const file of files) {
+    const buf = await file.arrayBuffer();
+    if (new DataView(buf).byteLength > 4 && new DataView(buf).getUint32(0, true) === 0x04034b50) {
+      docs.push(...await unzipJsonFiles(buf));
+    } else {
+      const j = JSON.parse(new TextDecoder().decode(buf));
+      docs.push(...(Array.isArray(j) ? j : expandNightdxDoc(j)));
+    }
+  }
+  const seen = new Set(HEARD_IMPORTED.map(o => o[0] + '|' + o[1]));
+  let added = 0, skipped = 0, heard = 0, logAdded = 0;
+  // Vlastní záloha (📤 Export): vrátí zápisy deníku i dříve importovaná pozorování
+  const backups = docs.filter(d => d && d.app === 'dx-radar');
+  if (backups.length) {
+    const log = getLog(), have = new Set(log.map(e => e.ts + '|' + e.freq));
+    for (const bk of backups) {
+      for (const e of Array.isArray(bk.log) ? bk.log : []) {
+        if (!e || !e.ts || !Number.isFinite(Number(e.freq)) || have.has(e.ts + '|' + e.freq)) continue;
+        have.add(e.ts + '|' + e.freq); log.push(e); logAdded++;
+      }
+      for (const h of Array.isArray(bk.heard) ? bk.heard : []) {
+        const t = Date.parse(h && h.utc), khz = Math.round(Number(h && h.khz));
+        if (!Number.isFinite(t) || !(khz > 0)) { skipped++; continue; }
+        const o = [khz, Math.round(t / 60000), Math.max(0, Math.min(3, Math.round(Number(h.q) || 0))),
+          Number.isFinite(h.lat) ? h.lat : null, Number.isFinite(h.lon) ? h.lon : null];
+        if (seen.has(o[0] + '|' + o[1])) continue;
+        seen.add(o[0] + '|' + o[1]); HEARD_IMPORTED.push(o); added++; if (o[2] > 0) heard++;
+      }
+    }
+    if (logAdded) { log.sort((a, b) => String(a.ts).localeCompare(String(b.ts))); setLog(log); updateLogBadge(); }
+  }
+  for (const d of docs) {
+    if (d && d.app === 'dx-radar') continue;
+    const o = obsFromNightdx(d);
+    if (!o) { skipped++; continue; }
+    const key = o[0] + '|' + o[1];
+    if (seen.has(key)) continue; // opakovaný import téhož exportu
+    seen.add(key); HEARD_IMPORTED.push(o); added++; if (o[2] > 0) heard++;
+  }
+  if (HEARD_IMPORTED.length > HEARD_MAX) {
+    HEARD_IMPORTED.sort((a, b) => a[1] - b[1]);
+    HEARD_IMPORTED = HEARD_IMPORTED.slice(-HEARD_MAX);
+  }
+  saveHeard(); rebuildHeardMem(); evaluateStations();
+  return { added, skipped, heard, log: logAdded };
+}
+// Export všeho: deník (ruční zápisy) + importovaná pozorování, čitelný JSON. Stejný soubor
+// jde zase naimportovat (jiné zařízení, záloha); duplicity se při importu přeskočí.
+function exportAllData() {
+  const data = {
+    app: 'dx-radar', v: 1, exported: new Date().toISOString(),
+    note: 'log = SWL log entries (q: 0 nothing, 1 weak, 2 readable, 3 good; old entries carry sinpo). ' +
+      'heard = imported observations (q as above, lat/lon = receiving site).',
+    log: getLog(),
+    heard: HEARD_IMPORTED.map(([khz, t, q, lat, lon]) => ({ khz, utc: new Date(t * 60000).toISOString(), q, lat, lon }))
+  };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = `dx-radar-data-${data.exported.slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  flashToast(tr('mem_exported', { log: data.log.length, n: data.heard.length }));
+}
+document.getElementById('btnMemExport').addEventListener('click', exportAllData);
+document.getElementById('btnMemImport').addEventListener('click', () => document.getElementById('memFile').click());
+document.getElementById('memFile').addEventListener('change', async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (!files.length) return;
+  let msg;
+  try { msg = tr('mem_imported', await importHeardFiles(files)); }
+  catch (err) { msg = tr('mem_err', { e: err.message }); }
+  flashToast(msg);
+});
+document.getElementById('btnMemClear').addEventListener('click', () => {
+  if (!HEARD_IMPORTED.length || !confirm(tr('mem_confirm_clear'))) return;
+  HEARD_IMPORTED = [];
+  saveHeard(); rebuildHeardMem(); evaluateStations();
+});
+document.getElementById('memOn').addEventListener('change', e => {
+  HEARD_ON = e.target.checked;
+  saveHeard(); updateMemStatus(); evaluateStations();
+});
+
 // 9c. BAREVNÝ MOTIV (Dark / Light) — přepínač tlačítkem, lokální persistence
 const THEME_KEY = 'dxr_theme_v1';
 const THEMES = [
@@ -2385,6 +2705,7 @@ document.getElementById('btnLang').addEventListener('click', () => {
   applyLang();
   updateTelemetryBar();                 // live/offline + geomag popisek
   updateBlStatus();                     // (zap/vyp) popisek
+  updateMemStatus();
   const lp = document.getElementById('logPanel');
   if (lp && lp.style.display === 'block') renderLogEntries();
   evaluateStations();                   // karty, status, tercily, radar
@@ -2429,6 +2750,7 @@ applyLang();                   // přelož statické texty dle jazyka
 loadTheme();                   // barevný motiv (Dark/Light) — hned, ať nebliká
 loadBlacklist();               // skryté stanice (název/země) — lokální seznam
 loadWeights();                 // váhy sliderů + min. skóre (lokální)
+loadHeard();                   // paměť příjmů (import NightDX + deník) — lokální
 loadQth();                     // obnoví naposledy zadané QTH (jen z tohoto zařízení)
 initTuningUI();                // dosadí hodnoty do sliderů a blacklist textarea
 updateTelemetryBar();          // offline odhad hned, poté se dosadí live NOAA data

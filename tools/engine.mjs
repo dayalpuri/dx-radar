@@ -18,7 +18,7 @@ export function deepMerge(a, b) {
 // override: objekt stejného tvaru jako window.SCORING (jen měněné klíče)
 export function loadEngine(repo = REPO, override = {}) {
   const html = fs.readFileSync(`${repo}/index.html`, 'utf8').split('\n');
-  const start = html.findIndex(l => l.startsWith('// ── Blacklist'));
+  const start = html.findIndex(l => l.startsWith('// ── Paměť příjmů'));
   const end = html.findIndex(l => l.startsWith('function evaluateStations'));
   if (start < 0 || end < 0) throw new Error('index.html: výřez skórovacího kódu nenalezen');
   const pre = html.filter(l => /^(const SCORE_HI|function antBand)/.test(l)).join('\n');
@@ -30,7 +30,8 @@ export function loadEngine(repo = REPO, override = {}) {
   vm.runInContext(engine + `;globalThis.API = { scoreStation, dedupActive, passesDay, stationKey, isTimeActive,
     calcGeodesic, mufEstimate, pathDaylight, propagationAdjust, solarElevation, solarDeclination,
     SPACE_WX, WEIGHTS, SCORING, setBlacklist: b => { BLACKLIST = b; BLACKLIST_ON = true; },
-    isBlacklisted };`, ctx);
+    isBlacklisted, memoryAdjust, obsFromNightdx, obsFromLog, setHeardObs,
+    setHeardOn: v => { HEARD_ON = v; } };`, ctx);
   return ctx.API;
 }
 
