@@ -5,3 +5,4 @@ __pycache__/
 nightdx-json-*.zip
 nightdx-radar-*.json
 dx-radar-data-*.json
+stations_calibration.txt
