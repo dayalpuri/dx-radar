@@ -1,3 +1,7 @@
 sked_eibi.csv
 __pycache__/
 *.pyc
+# osobní data z příjmu: exporty NightDX a zálohy z radaru (obsahují polohu, zip i adresu)
+nightdx-json-*.zip
+nightdx-radar-*.json
+dx-radar-data-*.json

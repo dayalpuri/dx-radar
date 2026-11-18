@@ -31,6 +31,14 @@
  * být číslo ("cnr" chytí "CNR1", ale "cri" ne "Radio Cristiana"); kód VELKÝMI (CHN)
  * = celá země (přesná shoda).
  *
+ * memory: paměť příjmů (jen PWA; CLI ji nemá). Pozorování na témže kmitočtu ve stejnou
+ * denní dobu (± windowH hodin UTC, váha klesá k okraji okna na polovinu) z téhož QTH
+ * (do sameQthDeg stupňů) a ne starší než maxAgeDays posunou skóre o
+ * amp·(slyšeno − n·baseline)/(n + k). baseline = obvyklý podíl slyšených pokusů, takže
+ * jedno „neslyšeno" ubere málo a jedno „slyšeno" přidá hodně; k tlumí jediné pozorování.
+ * heardMinDb = od kolika dB modulace nad šumem se nahrávka NightDX počítá jako slyšená.
+ * Ověřeno na 4 nocích NightDX (11/2026) křížově po nocích: AUC 0,65 → 0,74.
+ *
  * Formulový tvar (pořadí členů, MUF/skip/absorpce) je zrcadlený v obou jazycích;
  * zde žijí pouze čísla, která se reálně ladí.
  */
@@ -75,6 +83,8 @@ window.SCORING = {
   "qrm": { "coChannel": -25, "adjacent": -8, "adjacentBoth": -16, "loopHalves": true,
     "minInterfererScore": 45, "louderMargin": 3 },
   "dedup": { "sameSiteKm": 30 },
+  "memory": { "amp": 50, "baseline": 0.2, "k": 0.7, "windowH": 3, "maxAgeDays": 120,
+    "sameQthDeg": 0.5, "heardMinDb": 4 },
   "placeholderNames": ["for new organization", "new organization", "disaster relief", "unknown"],
   "blacklistDefault": ["for new organization", "new organization", "disaster relief", "unknown"]
 };
