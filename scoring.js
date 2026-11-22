@@ -34,6 +34,12 @@
  * + hopLossDb na každý další skok), v mezích −lossCap až +nearBonusCap. refKm je
  * vzdálenost s nulovým útlumem; nastavená tak, aby se úroveň skóre proti dřívějšímu
  * modelu neposunula (hranice 50/68 zůstávají).
+ * iono.mw: střední vlny (kmitočty pod maxKhz). V noci odraz od vrstvy E (layerKm, skok
+ * nejvýš maxHopKm), bez MUF a bez mrtvé zóny; propagační člen = jen absorpce vrstvy D
+ * (ve dne prostorovou vlnu pohltí celou) a polární útlum, skip člen = útlum vzdáleností
+ * s vlastním refKm / lossMul / hopLossDb. Přízemní vlna se nepočítá. Hodnoty jsou odhad
+ * z fyziky, neladěné: na 8 nocích NightDX (11/2026, 172 nahrávek, 43 slyšených) dává
+ * AUC 0,74 a v rozumném rozsahu konstant se nemění (0,71 až 0,75).
  * Laděno 11/2026 proti balkonovým snímkům (tools/calib.mjs) a 4 nocím z NightDX
  * (tools/memory_eval.mjs, sloupec „bez paměti"): AUC 0,65 → 0,70 na NightDX, balkon
  * beze zhoršení. Sezónní část (léto) stojí jen na fyzice a pár letních úlovcích
@@ -93,7 +99,8 @@ window.SCORING = {
     "mufSigma": 0.1, "mufPenalty": 45,
     "absMul": 0.5, "absCap": 45,
     "auroraLat": 55, "auroraKp": 3, "auroraPerKp": 4, "auroraCap": 20,
-    "refKm": 3200, "lossMul": 1.2, "hopLossDb": 2, "lossCap": 60, "nearBonusCap": 12
+    "refKm": 3200, "lossMul": 1.2, "hopLossDb": 2, "lossCap": 60, "nearBonusCap": 12,
+    "mw": { "maxKhz": 1800, "layerKm": 100, "maxHopKm": 2000, "refKm": 1500, "lossMul": 1.2, "hopLossDb": 6 }
   },
   "qrm": { "coChannel": -25, "adjacent": -8, "adjacentBoth": -16, "loopHalves": true,
     "minInterfererScore": 45, "louderMargin": 3 },

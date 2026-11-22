@@ -642,6 +642,7 @@
       <label data-i18n="band_label">Filtr pásem</label>
       <div class="band-pills" id="bandPills">
         <span class="band-pill active" data-band="all" data-i18n="all">Vše</span>
+        <span class="band-pill" data-band="mw" data-i18n="band_mw">SV</span>
         <span class="band-pill" data-band="tropo">60m/90m</span>
         <span class="band-pill" data-band="49">49m</span>
         <span class="band-pill" data-band="41">41m</span>
@@ -669,7 +670,7 @@
     <div class="control-group full">
       <label style="display:flex; align-items:center; gap:7px; cursor:pointer; font-weight:400;">
         <input type="checkbox" id="eibiExtra" style="width:auto; margin:0;">
-        <span data-i18n="eibi_extra_label">➕ Přidat EiBi (víc stanic, orientační poloha)</span>
+        <span data-i18n="eibi_extra_label">➕ Přidat EiBi (víc stanic a střední vlny, bez výkonů)</span>
       </label>
     </div>
   </section>
@@ -825,11 +826,11 @@ const I18N = {
     bl_reset: "↺ Výchozí seznam", radar_info: "Klikni na tečku na radaru…",
     radar_leg1: "Číslo ve výseči = počet aktivních vysílačů ve směru",
     radar_leg2: '<span class="dot-g">●</span> top cíle (bez čísel, detail klepnutím) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> ostatní',
-    band_label: "Filtr pásem", all: "Vše", sort_label: "Řazení stanic",
+    band_label: "Filtr pásem", band_mw: "SV", all: "Vše", sort_label: "Řazení stanic",
     sort_freq: "Kmitočet ▲", sort_score: "Skóre ▼",
     chance_label: "Skóre úlovku (pevné hranice)", chance_note: "— heuristika 5–99, ne %",
     chance_top: `Silné (≥${SCORING.boundaries.hi})`, chance_mid: `Slyšitelné (${SCORING.boundaries.mid}–${SCORING.boundaries.hi - 1})`, chance_low: `Slabé (<${SCORING.boundaries.mid})`,
-    eibi_extra_label: "➕ Přidat EiBi (víc stanic, orientační poloha)",
+    eibi_extra_label: "➕ Přidat EiBi (víc stanic a střední vlny, bez výkonů)",
     approx_loc: "Poloha přibližná (EiBi — střed země, ne přesný vysílač)",
     tw_sfi: "Sluneční tok:", tw_kp: "Geomagnetika:", tw_muf: "MUF odhad:", tw_cond: "Stav:",
     tw_loading: "Načítám NOAA…",
@@ -900,11 +901,11 @@ const I18N = {
     bl_reset: "↺ Default list", radar_info: "Tap a dot on the radar…",
     radar_leg1: "Number in a sector = count of active transmitters that way",
     radar_leg2: '<span class="dot-g">●</span> top targets (no number, tap for detail) <span class="dot-a">●</span> QRM <span class="dot-c">●</span> others',
-    band_label: "Band filter", all: "All", sort_label: "Sort stations",
+    band_label: "Band filter", band_mw: "MW", all: "All", sort_label: "Sort stations",
     sort_freq: "Frequency ▲", sort_score: "Score ▼",
     chance_label: "Catch score (fixed bands)", chance_note: "— heuristic 5–99, not %",
     chance_top: `Strong (≥${SCORING.boundaries.hi})`, chance_mid: `Audible (${SCORING.boundaries.mid}–${SCORING.boundaries.hi - 1})`, chance_low: `Weak (<${SCORING.boundaries.mid})`,
-    eibi_extra_label: "➕ Add EiBi (more stations, approximate location)",
+    eibi_extra_label: "➕ Add EiBi (more stations and medium wave, no powers)",
     approx_loc: "Approximate location (EiBi — country centroid, not the exact transmitter)",
     tw_sfi: "Solar flux:", tw_kp: "Geomagnetic:", tw_muf: "MUF est.:", tw_cond: "State:",
     tw_loading: "Loading NOAA…",
@@ -1140,7 +1141,7 @@ function setHeardObs(obs) {
 function obsFromNightdx(d) {
   if (!d || typeof d !== 'object') return null;
   const t = Date.parse(d.utc_start), khz = Math.round(Number(d.khz));
-  if (!Number.isFinite(t) || !(khz >= 1800) || d.error) return null;
+  if (!Number.isFinite(t) || !(khz > 0) || d.error) return null;
   if (!String(d.class_backend || '').startsWith('ast')) return null;
   const mod = Number(d.modulation_db), label = d.label || d.classification;
   const heard = label && label !== 'noise' && mod >= SCORING.memory.heardMinDb;
@@ -1371,12 +1372,12 @@ function gcPoint(lat1, lon1, lat2, lon2, frac) {
   return [Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI, Math.atan2(y, x) * 180 / Math.PI];
 }
 // Geometrie jednoho skoku: šikmý faktor M (sekans úhlu dopadu na vrstvu) a délka paprsku v km
-function hopGeometry(hopKm) {
-  const io = SCORING.iono, th = hopKm / (2 * R_EARTH), rh = R_EARTH + io.layerKm;
+function hopGeometry(hopKm, layerKm = SCORING.iono.layerKm) {
+  const io = SCORING.iono, th = hopKm / (2 * R_EARTH), rh = R_EARTH + layerKm;
   const elev = Math.max(Math.atan2(Math.cos(th) - R_EARTH / rh, Math.sin(th)), toRad(io.minElevDeg));
   const sinI = R_EARTH / rh * Math.cos(elev);
   const slant = 2 * Math.sqrt(rh * rh + R_EARTH * R_EARTH - 2 * R_EARTH * rh * Math.cos(th));
-  return { m: 1 / Math.sqrt(1 - sinI * sinI), slant: Math.max(slant, 2 * io.layerKm) };
+  return { m: 1 / Math.sqrt(1 - sinI * sinI), slant: Math.max(slant, 2 * layerKm) };
 }
 // Kritický kmitočet foF2 (MHz) nad bodem: den podle výšky Slunce (se zpožděním lagH,
 // vrstva doznívá), noc klesá od večera k minimu před svítáním (místní sluneční čas).
@@ -1408,9 +1409,28 @@ function absorptionDb(fMHz, zenith, secI, sfi) {
   const c = Math.pow(Math.max(0, Math.cos(toRad(0.881 * zenith))), 1.3);
   return 677.2 * secI * (1 + 0.0037 * r12) * c / (Math.pow(fMHz + 1.2, 1.98) + 10.2);
 }
+// Střední vlny (pod iono.mw.maxKhz): v noci odraz od vrstvy E (mw.layerKm, skok nejvýš
+// mw.maxHopKm), MUF ani mrtvá zóna tu nehrají roli; ve dne prostorovou vlnu pohltí
+// vrstva D. Přízemní vlnu model nepočítá, blízké stanice ve dne proto podhodnocuje.
+function ionoPathMw(fMHz, lat1, lon1, lat2, lon2, dist, date, sfi, kp) {
+  const io = SCORING.iono, mw = io.mw;
+  const d = Math.max(dist, 50), hops = Math.max(1, Math.ceil(d / mw.maxHopKm));
+  const g = hopGeometry(d / hops, mw.layerKm), secD = Math.min(g.m * 0.9, 3.5);
+  let absDb = 0, aurora = 0;
+  for (let k = 0; k < hops; k++) {
+    const [la, lo] = gcPoint(lat1, lon1, lat2, lon2, (k + 0.5) / hops);
+    absDb += absorptionDb(fMHz, 90 - solarElevation(la, lo, date), secD, sfi);
+    if (Math.abs(la) > io.auroraLat && kp > io.auroraKp) aurora += io.auroraPerKp * (kp - io.auroraKp);
+  }
+  const lossDb = 20 * Math.log10(g.slant * hops / mw.refKm) + mw.hopLossDb * (hops - 1);
+  const prop = -Math.min(io.absCap, io.absMul * absDb) - Math.min(io.auroraCap, aurora);
+  const skip = Math.max(-io.lossCap, Math.min(io.nearBonusCap, -mw.lossMul * lossDb));
+  return { prop: Math.round(prop), skip: Math.round(skip), muf: Infinity, hops, absDb };
+}
 // Oba členy pro jednu trasu (před váhami posuvníků) + MUF trasy pro zobrazení
 function ionoPath(freq, lat1, lon1, lat2, lon2, dist, date, sfi, kp) {
   const io = SCORING.iono, fMHz = freq / 1000;
+  if (freq < io.mw.maxKhz) return ionoPathMw(fMHz, lat1, lon1, lat2, lon2, dist, date, sfi, kp);
   const d = Math.max(dist, 50), hops = Math.max(1, Math.ceil(d / io.maxHopKm));
   const g = hopGeometry(d / hops), mMax = hopGeometry(io.maxHopKm).m;
   const secD = Math.min(g.m * 0.9, 3.5);
@@ -1576,6 +1596,7 @@ function minutesLeft(st, utcMinutes) {
 }
 
 function bandKey(freq) {
+  if (freq < SCORING.iono.mw.maxKhz) return "mw";
   if (freq < 5006) return "tropo";
   if (freq <= 6200) return "49";
   if (freq <= 7450) return "41";
@@ -1647,8 +1668,10 @@ function scoreStation(st, env, activeNow) {
   // F. Detekce sousedního a kanálového rušení (ACI / Co-Channel QRM) – jen od rušitelů,
   // kteří na QTH reálně dopadají silněji (louder). activeNow = null → skóre bez QRM.
   const qrmNow = activeNow || [];
-  const qrmPlus5 = qrmNow.find(other => other !== st && other.freq === f + 5 && louder(other, st, env));
-  const qrmMinus5 = qrmNow.find(other => other !== st && other.freq === f - 5 && louder(other, st, env));
+  // rozestup kanálů: KV 5 kHz, SV 9 kHz (Evropa, Asie, Afrika) nebo 10 kHz (Amerika)
+  const step = f >= SCORING.iono.mw.maxKhz ? 5 : f % 9 === 0 ? 9 : 10;
+  const qrmPlus5 = qrmNow.find(other => other !== st && other.freq === f + step && louder(other, st, env));
+  const qrmMinus5 = qrmNow.find(other => other !== st && other.freq === f - step && louder(other, st, env));
   const coChannel = qrmNow.find(other => other !== st && other.freq === f && louder(other, st, env));
 
   let qrmPenalty = 0;
@@ -1665,15 +1688,15 @@ function scoreStation(st, env, activeNow) {
     // rušitel z obou stran: postranním pásmem (USB/LSB) se dá uhnout jen jednomu
     qrmPenalty = SCORING.qrm.adjacentBoth;
     qrmFlag = true;
-    pl330Tip = tr('tip_qrm_both', { lo: f - 5, hi: f + 5 });
+    pl330Tip = tr('tip_qrm_both', { lo: f - step, hi: f + step });
   } else if (qrmPlus5) {
     qrmPenalty = SCORING.qrm.adjacent;
     qrmFlag = true;
-    pl330Tip = tr('tip_qrm_lsb', { f: f + 5, st: qrmPlus5.station });
+    pl330Tip = tr('tip_qrm_lsb', { f: f + step, st: qrmPlus5.station });
   } else if (qrmMinus5) {
     qrmPenalty = SCORING.qrm.adjacent;
     qrmFlag = true;
-    pl330Tip = tr('tip_qrm_usb', { f: f - 5, st: qrmMinus5.station });
+    pl330Tip = tr('tip_qrm_usb', { f: f - step, st: qrmMinus5.station });
   } else if (isLoop) {
     pl330Tip = tr('tip_loop');
   } else if (env.ant === 'whip' && st.kw <= 50) {

@@ -108,6 +108,7 @@ COUNTRY_COORDS = {
     "UZB": (41.30, 69.25),   # Uzbekistán (Taškent)
     "TKM": (38.00, 63.20),   # Turkmenistán
     "KGZ": (42.87, 74.60),   # Kyrgyzstán
+    "TJK": (38.56, 68.79),   # Tádžikistán (Dušanbe)
     "TWN": (24.71, 121.00),  # Tchaj-wan (Tamsui/Paochung)
     "KRE": (39.00, 125.75),  # Severní Korea (Kujang)
     "MNG": (47.90, 106.90),  # Mongolsko
@@ -472,6 +473,10 @@ def download_eibi(csv_path):
     return None, None
 
 
+# Dolní mez EiBi: od středních vln výš (rozhlas 526–1606 kHz, nad ním pobřežní a jiné
+# služební stanice až po krátké vlny). HFCC ani AOKI pod 2300 kHz nic nevedou.
+EIBI_MIN_KHZ = 526
+
 _EIBI_DAYS = {"Mo": 1, "Tu": 2, "We": 3, "Th": 4, "Fr": 5, "Sa": 6, "Su": 7}
 
 
@@ -509,13 +514,65 @@ def parse_eibi_days(raw):
     return "".join(str(d) for d in sorted(days))
 
 
-def parse_eibi_csv(csv_path):
+_EIBI_COORD = re.compile(r"(\d{1,2})([NS])(\d{2})(?:'(\d{2}(?:\.\d+)?)\")?-"
+                         r"(\d{1,3})([EW])(\d{2})(?:'(\d{2}(?:\.\d+)?)\")?")
+
+
+def parse_eibi_sites(text):
+    """Oddíl „Transmitter site codes" z EiBi README.TXT -> {ITU: {kód: (název, lat, lon)}}.
+
+    Řádky „ALG: fk-F'Kirina (Aïn Beïda) 35N44-07E21", další vysílače téže země odsazené
+    bez ITU. Záznam bez kódu („LTU: Sitkunai 55N02'37"-23E48'28" except:") je výchozí
+    vysílač země, klíč ''. Místa bez souřadnic („Unknown site") se vynechají.
+    """
+    sites = {}
+    start = text.rfind("Transmitter site codes")
+    itu = None
+    for line in text[start:].splitlines()[1:] if start >= 0 else ():
+        m = re.match(r"\s{3}([A-Z]{1,3}):\s*(.*)", line)
+        if m:
+            itu, entry = m.group(1), m.group(2)
+        elif itu and re.match(r"\s{6,}\S", line):
+            entry = line.strip()
+        else:
+            continue
+        c = _EIBI_COORD.search(entry)
+        if not c:
+            continue
+        lat = (int(c.group(1)) + int(c.group(3)) / 60 + float(c.group(4) or 0) / 3600) * (-1 if c.group(2) == "S" else 1)
+        lon = (int(c.group(5)) + int(c.group(7)) / 60 + float(c.group(8) or 0) / 3600) * (-1 if c.group(6) == "W" else 1)
+        name = entry[:c.start()].strip()
+        # kód = krátký řetězec před pomlčkou, za níž nezačíná malé písmeno („al-Algiers")
+        k = re.match(r"([A-Za-z][a-z0-9]{0,3})-(?![a-z])(.*)", name)
+        code, name = (k.group(1), k.group(2).strip()) if k else ("", name)
+        sites.setdefault(itu, {}).setdefault(code, (name, round(lat, 3), round(lon, 3)))
+    return sites
+
+
+def download_eibi_sites():
+    """Stáhne README.TXT z eibispace.de a vrátí tabulku vysílačů; při chybě {}."""
+    try:
+        req = urllib.request.Request(EIBI_BASE + "README.TXT", headers={"User-Agent": "dx-radar/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            sites = parse_eibi_sites(r.read().decode("latin-1"))
+        print(f"[+] EiBi vysílače: {sum(len(v) for v in sites.values())} míst v {len(sites)} zemích")
+        return sites
+    except Exception as exc:
+        print(f"[!] EiBi README.TXT nedostupné ({exc}) - polohy jen podle středu země.")
+        return {}
+
+
+def parse_eibi_csv(csv_path, sites=None):
     """Rozparsuje sked-*.csv do záznamů kompatibilních s PWA (index.html).
 
     Formát EiBi (oddělovač ';', první řádek = hlavička):
       0: kHz, 1: HHMM-HHMM, 2: dny, 3: ITU země, 4: stanice, 5: jazyk,
       6: cílová oblast, 7: kód vysílače, 8: persistence, 9-10: platnost.
+    Kód vysílače: „fk" = místo v domovské zemi stanice, „/LTU-v" = místo v jiné zemi,
+    „/LTU" nebo prázdné = výchozí vysílač té země. S tabulkou sites (parse_eibi_sites)
+    dostane záznam přesnou polohu; jinak střed země vysílače a příznak approxLoc.
     """
+    sites = sites or {}
     records = []
     skipped = {}
     with open(csv_path, mode="r", encoding="latin-1") as f:
@@ -528,7 +585,7 @@ def parse_eibi_csv(csv_path):
                 freq = int(float(row[0].strip()))
             except ValueError:
                 continue
-            if not (2300 <= freq <= 26100):
+            if not EIBI_MIN_KHZ <= freq <= 26100:
                 continue
             time_raw = row[1].strip()
             if len(time_raw) != 9 or "-" not in time_raw:
@@ -540,10 +597,17 @@ def parse_eibi_csv(csv_path):
             station = row[4].strip()
             lang = row[5].strip() if len(row) > 5 else ""
             site = row[7].strip() if len(row) > 7 else ""
-            if country not in COUNTRY_COORDS:
-                skipped[country] = skipped.get(country, 0) + 1
+            host, code = country, site
+            if site.startswith("/"):
+                host, _, code = site[1:].partition("-")
+            exact = sites.get(host, {}).get(code)
+            if exact:
+                site, lat, lon = exact
+            elif host in COUNTRY_COORDS:
+                lat, lon = COUNTRY_COORDS[host]
+            else:
+                skipped[host] = skipped.get(host, 0) + 1
                 continue  # bez souřadnic nemá záznam pro radar hodnotu
-            lat, lon = COUNTRY_COORDS[country]
             is_china = (country in CHINA_ITU
                         or any(pat in station for pat in CHINA_NAME_PATTERNS))
             records.append({
@@ -558,8 +622,9 @@ def parse_eibi_csv(csv_path):
                 "kw": 500 if is_china else 100,
                 "isChina": is_china,
                 "days": parse_eibi_days(row[2]),
-                "approxLoc": True,  # poloha = centroid země, ne přesný vysílač
             })
+            if not exact:
+                records[-1]["approxLoc"] = True  # poloha = centroid země, ne přesný vysílač
     if skipped:
         top = ", ".join(f"{k or '?'}:{v}" for k, v in sorted(skipped.items(), key=lambda kv: -kv[1]))
         print(f"[!] EiBi: {sum(skipped.values())} záznamů bez souřadnic země přeskočeno ({top}).")
@@ -1053,14 +1118,15 @@ def gc_point(lat1, lon1, lat2, lon2, frac):
     return math.atan2(z, math.sqrt(x * x + y * y)) * 180 / math.pi, math.atan2(y, x) * 180 / math.pi
 
 
-def hop_geometry(hop_km):
-    """Jeden skok: (šikmý faktor M, délka paprsku v km)."""
+def hop_geometry(hop_km, layer_km=None):
+    """Jeden skok: (šikmý faktor M, délka paprsku v km). layer_km = výška vrstvy (default F2)."""
     io = SCORING["iono"]
-    th, rh = hop_km / (2 * R_EARTH), R_EARTH + io["layerKm"]
+    layer_km = layer_km or io["layerKm"]
+    th, rh = hop_km / (2 * R_EARTH), R_EARTH + layer_km
     elev = max(math.atan2(math.cos(th) - R_EARTH / rh, math.sin(th)), math.radians(io["minElevDeg"]))
     sin_i = R_EARTH / rh * math.cos(elev)
     slant = 2 * math.sqrt(rh * rh + R_EARTH * R_EARTH - 2 * R_EARTH * rh * math.cos(th))
-    return 1 / math.sqrt(1 - sin_i * sin_i), max(slant, 2 * io["layerKm"])
+    return 1 / math.sqrt(1 - sin_i * sin_i), max(slant, 2 * layer_km)
 
 
 def fof2_estimate(lat, lon, dt, sfi, kp):
@@ -1097,10 +1163,32 @@ def absorption_db(f_mhz, zenith, sec_i, sfi):
     return 677.2 * sec_i * (1 + 0.0037 * r12) * c / (math.pow(f_mhz + 1.2, 1.98) + 10.2)
 
 
+def iono_path_mw(f_mhz, lat1, lon1, lat2, lon2, dist, dt, sfi, kp):
+    """Střední vlny: (propagační člen, skip člen); shodné s PWA ionoPathMw()."""
+    io = SCORING["iono"]
+    mw = io["mw"]
+    d = max(dist, 50)
+    hops = max(1, math.ceil(d / mw["maxHopKm"]))
+    m, slant = hop_geometry(d / hops, mw["layerKm"])
+    sec_d = min(m * 0.9, 3.5)
+    abs_db, aurora = 0, 0
+    for k in range(hops):
+        la, lo = gc_point(lat1, lon1, lat2, lon2, (k + 0.5) / hops)
+        abs_db += absorption_db(f_mhz, 90 - solar_elevation(la, lo, dt), sec_d, sfi)
+        if abs(la) > io["auroraLat"] and kp > io["auroraKp"]:
+            aurora += io["auroraPerKp"] * (kp - io["auroraKp"])
+    loss_db = 20 * math.log10(slant * hops / mw["refKm"]) + mw["hopLossDb"] * (hops - 1)
+    prop = -min(io["absCap"], io["absMul"] * abs_db) - min(io["auroraCap"], aurora)
+    skip = max(-io["lossCap"], min(io["nearBonusCap"], -mw["lossMul"] * loss_db))
+    return jround(prop), jround(skip)
+
+
 def iono_path(freq, lat1, lon1, lat2, lon2, dist, dt, sfi, kp):
     """(propagační člen, skip člen) před váhami; shodné s PWA ionoPath()."""
     io = SCORING["iono"]
     f_mhz = freq / 1000
+    if freq < io["mw"]["maxKhz"]:
+        return iono_path_mw(f_mhz, lat1, lon1, lat2, lon2, dist, dt, sfi, kp)
     d = max(dist, 50)
     hops = max(1, math.ceil(d / io["maxHopKm"]))
     m, slant = hop_geometry(d / hops)
@@ -1122,6 +1210,13 @@ def iono_path(freq, lat1, lon1, lat2, lon2, dist, dt, sfi, kp):
     prop = -io["mufPenalty"] * (1 - p_band) - min(io["absCap"], io["absMul"] * abs_db) - min(io["auroraCap"], aurora)
     skip = -io["mufPenalty"] * (p_band - p_path) + max(-io["lossCap"], min(io["nearBonusCap"], -io["lossMul"] * loss_db))
     return jround(prop), jround(skip)
+
+
+def channel_step(freq):
+    """Rozestup sousedních kanálů v kHz: KV 5, SV 9 (Evropa, Asie, Afrika) nebo 10 (Amerika)."""
+    if freq >= SCORING["iono"]["mw"]["maxKhz"]:
+        return 5
+    return 9 if freq % 9 == 0 else 10
 
 
 def _ant_band(buckets, f):
@@ -1181,10 +1276,11 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
 
     # QRM jen od rušitelů, kteří na QTH reálně dopadají silněji; active_now=None = bez QRM
     qrm_now = active_now or []
+    step = channel_step(st["freq"])
     qrm_plus5 = next((o for o in qrm_now if o is not st
-                      and o["freq"] == st["freq"] + 5 and louder(o, st, ctx)), None)
+                      and o["freq"] == st["freq"] + step and louder(o, st, ctx)), None)
     qrm_minus5 = next((o for o in qrm_now if o is not st
-                       and o["freq"] == st["freq"] - 5 and louder(o, st, ctx)), None)
+                       and o["freq"] == st["freq"] - step and louder(o, st, ctx)), None)
     co_channel = next((o for o in qrm_now if o is not st
                        and o["freq"] == st["freq"] and louder(o, st, ctx)), None)
 
@@ -1197,14 +1293,14 @@ def _score_one(st, qth, rx, ant, active_now, sfi, kp, ctx=None):
     elif qrm_plus5 and qrm_minus5:
         # rušitel z obou stran: postranním pásmem (USB/LSB) se dá uhnout jen jednomu
         qrm_penalty = q["adjacentBoth"]
-        tip = (f"QRM z obou stran ({st['freq'] - 5} i {st['freq'] + 5} kHz) -> "
+        tip = (f"QRM z obou stran ({st['freq'] - step} i {st['freq'] + step} kHz) -> "
                f"zúži filtr na BW 2 kHz, případně sync AM!")
     elif qrm_plus5:
         qrm_penalty = q["adjacent"]
-        tip = f"QRM z {st['freq'] + 5} kHz ({qrm_plus5['station']}) -> Přepni na LSB, BFO 00, BW 2.5 kHz!"
+        tip = f"QRM z {st['freq'] + step} kHz ({qrm_plus5['station']}) -> Přepni na LSB, BFO 00, BW 2.5 kHz!"
     elif qrm_minus5:
         qrm_penalty = q["adjacent"]
-        tip = f"QRM z {st['freq'] - 5} kHz ({qrm_minus5['station']}) -> Přepni na USB, BFO 00, BW 2.5 kHz!"
+        tip = f"QRM z {st['freq'] - step} kHz ({qrm_minus5['station']}) -> Přepni na USB, BFO 00, BW 2.5 kHz!"
     if ant == "youloop" and q.get("loopHalves"):
         qrm_penalty = jround(qrm_penalty / 2)
 
@@ -1494,7 +1590,7 @@ def main():
     if "aoki" in got_season:
         merged = merge_schedules(merged, aoki_records, stats=merge_stats)
     main_season = next(iter(got_season.values()), None)
-    # EiBi se do schedule.json NEMERGUJE (jen country-centroid souřadnice by kazily skóre).
+    # EiBi se do schedule.json NEMERGUJE (bez výkonů a azimutů, část jen se středem země).
     # Místo toho jde do samostatného schedule_eibi.json jako volitelný doplněk pro PWA:
     # stanice mimo HFCC/AOKI, označené approxLoc (hrubá poloha). Appka ho přimerguje
     # jen když uživatel zapne přepínač „+ EiBi".
@@ -1511,7 +1607,7 @@ def main():
             # download_eibi vrací název souboru (např. "sked-b26.csv") -> normalizuj na sezónu
             m = re.search(r"([ab]\d\d)", str(eibi_season or csv_path or ""))
             eibi_season = m.group(1) if m else None
-            eibi_records = parse_eibi_csv(csv_path)
+            eibi_records = parse_eibi_csv(csv_path, None if args.offline else download_eibi_sites())
             if eibi_records and eibi_season and main_season and eibi_season != main_season:
                 print(f"[i] EiBi ({eibi_season}) doplněk přeskočen - jiná sezóna než "
                       f"HFCC/AOKI ({main_season.upper()}).")
@@ -1519,7 +1615,9 @@ def main():
                 # Doplněk = jen vysílání, která HFCC/AOKI nemá (stejná stanice v jiném
                 # čase/dnech zůstává); různé stanice na stejném kmitočtu se nezahazují.
                 eibi_extra = merge_schedules(merged, eibi_records)[len(merged):]
-                print(f"[i] EiBi doplněk: {len(eibi_extra)} stanic navíc mimo HFCC/AOKI (hrubá poloha).")
+                approx = sum(1 for r in eibi_extra if r.get("approxLoc"))
+                print(f"[i] EiBi doplněk: {len(eibi_extra)} stanic navíc mimo HFCC/AOKI "
+                      f"({approx} jen s hrubou polohou).")
 
     if not merged and not eibi_extra:
         print("[!] Žádná data k uložení.")

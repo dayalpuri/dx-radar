@@ -34,7 +34,7 @@ najdeš níže a v [`legal.html`](legal.html).
 | `scoring.js`          | Jediný zdroj laditelných konstant skóre (váhy, hranice, výchozí blacklist) — čte ho PWA i CLI |
 | `eibi_sync.py`        | Stahovač dat (HFCC + AOKI + EiBi → generuje `schedule.json`) + CLI radar |
 | `schedule.json`       | Vygenerovaná databáze (HFCC + AOKI, přesné pozice vysílačů), commituje se do repa |
-| `schedule_eibi.json`  | Volitelný EiBi doplněk (stanice mimo HFCC/AOKI, orientační pozice) |
+| `schedule_eibi.json`  | Volitelný EiBi doplněk (stanice mimo HFCC/AOKI a střední vlny, bez výkonů) |
 | `*.meta.json`         | Sezóna, zdroje a počet záznamů vygenerovaných souborů         |
 | `manifest.webmanifest`| PWA manifest (ikona, „Přidat na plochu")                    |
 | `sw.js`               | Service worker — po první návštěvě jede i offline           |
@@ -48,7 +48,7 @@ najdeš níže a v [`legal.html`](legal.html).
 |--------|---------|-----|
 | **HFCC** | zimní/letní rozvrh dle sezóny, **přesné GPS vysílačů** (site.txt), reálné výkony kW, **azimuty antén** (korekce směrovosti!), dny vysílání, jména vysílatelů | `hfcc.org/data/{a,b}YY/` |
 | **AOKI** (Bi Newsletter for DXers, „AOKI list"; osobní newsletter správce webu, ne oficiální NDXC) | nejlepší jména stanic, přesné souřadnice (DDMMSS), výkony, azimuty, dny; distribuce zip se Shift-JIS | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
-| **EiBi** | největší množství stanic (~8 000), často dřív než HFCC; poloha jen přibližně (ITU kód země → GPS); dny vysílání | `eibispace.de/dx/sked-*.csv` |
+| **EiBi** | největší množství stanic (~8 000), často dřív než HFCC; jediný zdroj pod 2300 kHz (střední vlny od 526 kHz a pobřežní stanice nad nimi); poloha podle kódu vysílače z `README.TXT`, jinak střed země; bez výkonů; dny vysílání | `eibispace.de/dx/sked-*.csv` |
 
 Slučuje se v pořadí HFCC > AOKI > EiBi. Záznam méně prioritního zdroje se vyřadí, jen
 když jde o totéž vysílání (stejný kmitočet + stejný název stanice nebo stejný vysílač,

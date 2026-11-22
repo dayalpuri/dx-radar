@@ -35,7 +35,7 @@ licensing are below and in [`legal.html`](legal.html).
 | `scoring.js`          | Single source of tunable score constants (weights, thresholds, default blacklist) — read by both the PWA and the CLI |
 | `eibi_sync.py`        | Data harvester (HFCC + AOKI + EiBi → builds `schedule.json`) + CLI radar |
 | `schedule.json`       | Generated database (HFCC + AOKI, precise transmitter positions) committed to the repo |
-| `schedule_eibi.json`  | Optional EiBi supplement (stations not in HFCC/AOKI, approximate positions) |
+| `schedule_eibi.json`  | Optional EiBi supplement (stations not in HFCC/AOKI plus medium wave, no powers) |
 | `*.meta.json`         | Season, sources and record count of the generated files      |
 | `manifest.webmanifest`| PWA manifest (icon, "Add to Home Screen")                   |
 | `sw.js`               | Service worker — works offline after the first visit        |
@@ -49,7 +49,7 @@ licensing are below and in [`legal.html`](legal.html).
 |------|------------------|-------|
 | **HFCC** | seasonal (winter/summer) schedule, **exact transmitter GPS** (site.txt), real power in kW, **antenna azimuths** (directivity!), broadcast days, broadcaster names | `hfcc.org/data/{a,b}YY/` |
 | **AOKI** (Bi Newsletter for DXers, "AOKI list"; personal newsletter of the site maintainer, not official NDXC) | best station names, precise coordinates (DDMMSS), power, azimuths, days; distributed as a Shift-JIS zip | `mediacat.ne.jp/binews/us/xz/xz*.zip` |
-| **EiBi** | the largest number of stations (~8,000), often ahead of HFCC; position only approximate (ITU country code → GPS); days of operation | `eibispace.de/dx/sked-*.csv` |
+| **EiBi** | the largest number of stations (~8,000), often ahead of HFCC; the only source below 2300 kHz (medium wave from 526 kHz and the coastal stations above it); position from the transmitter-site code in `README.TXT`, otherwise country centre; no powers; days of operation | `eibispace.de/dx/sked-*.csv` |
 
 Merged in the order HFCC > AOKI > EiBi. A lower-priority record is dropped only if it
 is the same broadcast (same frequency + same station name or the same transmitter site,

@@ -62,7 +62,7 @@ const top = (xs, k, n) => [...xs].sort((a, b) => b[k] - a[k]).slice(0, n).filter
 const line = (name, xs) => console.log(name.padEnd(18), `n=${String(xs.length).padStart(3)} slyšeno ${String(xs.filter(x => x.heard).length).padStart(3)}`,
   `| AUC bez paměti ${auc(xs, 'base').toFixed(3)} → s pamětí ${auc(xs, 'mem').toFixed(3)}`,
   `| TOP30 ${top(xs, 'base', 30)} → ${top(xs, 'mem', 30)}`);
-console.log(`Nahrávek ${rows.length}, použitelných KV pozorování ${obs.length}, v rozvrhu ${out.length}. Paměť vždy jen z ostatních nocí.`);
+console.log(`Nahrávek ${rows.length}, použitelných pozorování ${obs.length}, v rozvrhu ${out.length}. Paměť vždy jen z ostatních nocí.`);
 line('všechny noci', out);
 for (const n of nights) line(n, out.filter(x => x.night === n));
 const up = out.filter(x => x.adj > 0), down = out.filter(x => x.adj < 0);
