@@ -1,6 +1,7 @@
 // Výpis skóre z PWA kódu pro kalibrační snímky (JSON na stdout) - vstup pro tools/parity.py
-import { loadEngine, loadSnapshots, loadDb, activeAt, QTH_CALIB, WX_CALIB } from './engine.mjs';
+import { loadEngine, loadSnapshots, loadDb, activeAt, qthCalib, WX_CALIB } from './engine.mjs';
 
+const QTH_CALIB = qthCalib();
 const A = loadEngine();
 A.SPACE_WX.sfi = WX_CALIB.sfi; A.SPACE_WX.kp = WX_CALIB.kp;
 const db = loadDb();

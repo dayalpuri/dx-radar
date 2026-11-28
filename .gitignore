@@ -7,3 +7,6 @@ nightdx-radar-*.json
 dx-radar-data-*.json
 stations_calibration.txt
 Sešit*.txt
+# poloha a místa příjmu pro kalibrační skripty (vzor: tools/local.example.json)
+tools/local.json
+tools/logs_heard.csv

@@ -16,7 +16,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 import eibi_sync as E  # noqa: E402
 
-QTH = {"name": "kalibrace", "lat": 0.0, "lon": 0.0, "alt": 305, "az": 50}
+# Poloha jen z tools/local.json (osobní data, v .gitignore) - vzor tools/local.example.json
+with open(os.path.join(REPO, "tools", "local.json"), encoding="utf-8") as _f:
+    _q = json.load(_f)["qthCalib"]
+QTH = {"name": "kalibrace", "lat": _q["myLat"], "lon": _q["myLon"], "alt": _q["alt"], "az": _q["balconyAz"]}
 SFI, KP = 125, 3
 
 

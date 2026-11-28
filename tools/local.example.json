@@ -1,0 +1,17 @@
+{
+  "_": "Zkopíruj jako tools/local.json a vyplň. local.json je v .gitignore - poloha zůstává jen u tebe.",
+  "qthCalib": {
+    "myLat": 0.0,
+    "myLon": 0.0,
+    "alt": 300,
+    "balconyAz": 180,
+    "rx": "pl330",
+    "ant": "whip"
+  },
+  "rx": {
+    "doma": [
+      0.0,
+      0.0
+    ]
+  }
+}

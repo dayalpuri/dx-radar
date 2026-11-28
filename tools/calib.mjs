@@ -7,8 +7,9 @@
 //   node tools/calib.mjs --top           + TOP10 seznam (✓kvalita / ✗)
 //   node tools/calib.mjs --override '{"iono":{"decayH":9}}'       s přepsanými konstantami
 //   node tools/calib.mjs --diff '{"iono":{"lossMul":1.4}}'        per kmitočet: aktuální → override
-import { loadEngine, loadSnapshots, loadDb, activeAt, parseOverrideArg, QTH_CALIB, WX_CALIB } from './engine.mjs';
+import { loadEngine, loadSnapshots, loadDb, activeAt, parseOverrideArg, qthCalib, WX_CALIB } from './engine.mjs';
 
+const QTH_CALIB = qthCalib();
 const argv = process.argv.slice(2);
 const db = loadDb();
 const snaps = loadSnapshots();

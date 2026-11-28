@@ -1,4 +1,4 @@
-// Kontrola propagačního a skip členu proti slyšeným stanicím z logů (tools/logs_heard.csv):
+// Kontrola propagačního a skip členu proti slyšeným stanicím z logů (tools/logs_heard.csv, lokální, mimo git):
 // pro každý úlovek spočítá MUF trasy a oba členy aktuálního kódu a s přepsanými konstantami.
 // Jen pozitiva (co šlo) - hlídá, že změna modelu ionosféry nezabije prokazatelné úlovky
 // v jiném ročním období než kalibrační data (ta jsou jen z listopadu). Rozvrh pro ty dny
@@ -6,12 +6,13 @@
 //
 //   node tools/heard_check.mjs [--override '{"iono":{"seasonSummer":1}}'] [--sfi 125] [--all]
 import fs from 'fs';
-import { loadEngine, parseOverrideArg, REPO } from './engine.mjs';
+import { loadEngine, loadLocal, parseOverrideArg, REPO } from './engine.mjs';
 
 const argv = process.argv.slice(2);
 const si = argv.indexOf('--sfi');
 const SFI = si >= 0 ? +argv[si + 1] : 125;
-const sites = JSON.parse(fs.readFileSync(`${REPO}/tools/sites.json`, 'utf8'));
+// vysílače = veřejná data (tx_sites.json); místa příjmu = osobní (local.json, mimo git)
+const sites = { tx: JSON.parse(fs.readFileSync(`${REPO}/tools/tx_sites.json`, 'utf8')).tx, rx: loadLocal().rx || {} };
 const rows = fs.readFileSync(`${REPO}/tools/logs_heard.csv`, 'utf8').split('\n')
   .filter(l => l && !l.startsWith('#') && !l.startsWith('utc,')).map(l => l.split(','));
 

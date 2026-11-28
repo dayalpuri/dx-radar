@@ -60,7 +60,14 @@ export function loadSnapshots(repo = REPO, file = 'stations_calibration.txt') {
   return snaps;
 }
 
-export const QTH_CALIB = { myLat: 0.0, myLon: 0.0, alt: 305, balconyAz: 50, rx: 'pl330', ant: 'whip' };
+// Poloha a místa příjmu jsou osobní data: leží jen v tools/local.json (v .gitignore),
+// nikdy v kódu. Vzor: tools/local.example.json.
+export function loadLocal(repo = REPO) {
+  const p = `${repo}/tools/local.json`;
+  if (!fs.existsSync(p)) throw new Error(`chybí ${p} - zkopíruj tools/local.example.json a vyplň svoji polohu`);
+  return JSON.parse(fs.readFileSync(p, 'utf8'));
+}
+export const qthCalib = (repo = REPO) => loadLocal(repo).qthCalib;
 export const WX_CALIB = { sfi: 125, kp: 3 };
 
 export function loadDb(repo = REPO) {
